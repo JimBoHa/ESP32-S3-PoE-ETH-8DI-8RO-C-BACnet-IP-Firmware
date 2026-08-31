@@ -5,11 +5,12 @@ commands, and device health from the Waveshare
 `ESP32-S3-POE-ETH-8DI-8RO-C` as BACnet/IP objects. It replaces the factory
 application and provides authenticated firmware updates over Ethernet.
 
-> **Hardware bring-up release:** version 0.9.1 has passed host tests and initial
+> **Hardware bring-up release:** version 0.10.0 has passed host tests and initial
 > target-board checks for safe relay startup, RTC detection, W5500 link, DHCP,
-> ICMP, management HTTP, and BACnet packet reception. The full
-> hardware-in-the-loop checklist is still incomplete. Disconnect controlled
-> loads during first commissioning.
+> ICMP, management HTTP, BACnet property reads, and one-at-a-time Binary Output
+> commands. The full hardware-in-the-loop checklist—especially electrically
+> stimulated inputs and relay contact feedback—is still incomplete. Disconnect
+> controlled loads during first commissioning.
 
 This source targets only the 16 MB flash / 8 MB PSRAM model built around an
 `ESP32-S3-WROOM-1U-N16R8`, W5500 Ethernet controller, and TCA9554 relay
@@ -29,8 +30,11 @@ expander. Verify the exact product label and board revision before flashing.
   become outputs. Relay-state restore is available but disabled by default.
 - Dual OTA slots, rollback, image validation, project-identity validation, and
   HMAC-SHA256 authenticated Ethernet uploads.
+- Embedded, factory-inspired management interface with live I/O, BACnet and
+  hardware status, persistent configuration, authenticated priority-aware
+  relay commands, OTA, and reboot.
 - Read-only status/configuration HTTP endpoints and a standard-library Python
-  commissioning client.
+  commissioning client for scripted management.
 
 ## BACnet object map
 
@@ -74,14 +78,33 @@ tests/run_host_tests.sh
 python tools/package_release.py
 ```
 
-The package is written to `release/v0.9.1/` and contains:
+The package is written to `release/v0.10.0/` and contains:
 
 - `initial-flash.bin` for the first USB installation;
 - `firmware-ota.bin` for later Ethernet updates;
 - individual bootloader, partition-table, and OTA-data images;
 - a manifest, SHA-256 checksum list, and license notices.
 
-The application partition is 6 MiB. Version 0.9.1 occupies about 0.51 MiB.
+The application partition is 6 MiB. Version 0.10.0 occupies about 0.55 MiB.
+
+## Web management
+
+Open the device address in a current browser, for example
+`http://192.168.75.153/`. The factory-style Relay Control page shows every DI
+and RO, effective BACnet priority, network/BACnet health, runtime data, and the
+persistent configuration. The Configuration and Firmware tabs provide the
+repository's full management feature set.
+
+Status and configuration reads are public. Relay commands, configuration
+writes, OTA, and reboot require the first-boot admin key. The page signs each
+mutation locally and does not send or store the key. Relay commands use the
+BACnet Binary Output priority array (priority 8 by default); `Release` clears
+the selected slot instead of bypassing BACnet state.
+
+Because the page itself is delivered over plain HTTP, use key-bearing browser
+sessions only on a trusted management network. An active man-in-the-middle
+could replace the page before the key is entered. The supplied local Python
+client is preferred when the network path is not fully trusted.
 
 ## Persistent configuration
 
@@ -94,6 +117,16 @@ Public read-only calls:
 ```sh
 python tools/device_admin.py --device 192.168.75.153 status
 python tools/device_admin.py --device 192.168.75.153 config-get
+```
+
+Command or relinquish one output through the same authenticated BACnet priority
+path used by the web page:
+
+```sh
+python tools/device_admin.py \
+  --device 192.168.75.153 \
+  --key-file device.key \
+  relay-set --channel 1 --state on --priority 8
 ```
 
 Configuration updates are partial JSON objects. Values are validated, written
@@ -144,7 +177,7 @@ Upload only `firmware-ota.bin`, never the merged initial-flash image:
 python tools/device_admin.py \
   --device 192.168.75.153 \
   --key-file device.key \
-  ota --file release/v0.9.1/firmware-ota.bin --yes
+  ota --file release/v0.10.0/firmware-ota.bin --yes
 ```
 
 The client checks the ESP image header and project identity. The device signs

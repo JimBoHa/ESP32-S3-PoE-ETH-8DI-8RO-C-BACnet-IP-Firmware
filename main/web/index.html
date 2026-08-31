@@ -1,0 +1,793 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ESP32-S3-PoE-ETH-8DI-8RO-C</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #25282c;
+      --muted: #687078;
+      --line: #d6dadd;
+      --paper: #fff;
+      --page: #eceeef;
+      --header: #33373b;
+      --green: #16834b;
+      --green-soft: #e6f5ed;
+      --red: #b62f3a;
+      --red-soft: #fae9eb;
+      --amber: #a66309;
+      --amber-soft: #fff3db;
+      --blue: #1667a8;
+      --shadow: 0 3px 12px rgba(0, 0, 0, .16);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font: 14px/1.45 Arial, Helvetica, sans-serif;
+    }
+    header {
+      background: var(--header);
+      color: #fff;
+      text-align: center;
+      padding: 18px 18px 0;
+      box-shadow: var(--shadow);
+    }
+    header h1 { margin: 0; font-size: clamp(19px, 3vw, 28px); letter-spacing: .01em; }
+    header p { margin: 5px 0 14px; color: #cfd3d6; }
+    nav { display: flex; justify-content: center; gap: 2px; overflow-x: auto; }
+    nav button {
+      border: 0;
+      border-radius: 5px 5px 0 0;
+      padding: 11px 22px;
+      background: transparent;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    nav button:hover, nav button:focus-visible { background: #454a4f; }
+    nav button.active { background: var(--page); color: var(--ink); }
+    main { width: min(1080px, calc(100% - 28px)); margin: 22px auto 42px; }
+    .panel {
+      display: none;
+      background: var(--paper);
+      border-radius: 7px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+    .panel.active { display: block; }
+    .panel h2 { margin: 0 0 4px; font-size: 21px; }
+    .panel-intro { margin: 0 0 20px; color: var(--muted); }
+    .banner {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 11px 14px;
+      margin-bottom: 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f8f9f9;
+    }
+    .banner.error { border-color: #e2a2a7; background: var(--red-soft); color: #7c1d26; }
+    .banner.warning { border-color: #e4c17e; background: var(--amber-soft); color: #694006; }
+    .connection-dot, .lamp {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      flex: 0 0 12px;
+      border-radius: 50%;
+      background: #9ca2a7;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.18);
+    }
+    .connection-dot.on, .lamp.on { background: #21a861; box-shadow: 0 0 0 3px rgba(33,168,97,.14); }
+    .lamp.off { background: #9ca2a7; }
+    .lamp.fault { background: #d33d49; box-shadow: 0 0 0 3px rgba(211,61,73,.13); }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 10px 16px;
+      margin: 0 0 18px;
+      padding: 14px;
+      background: #f7f8f8;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+    label { display: block; color: #444a50; font-weight: 700; }
+    label small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
+    input, select, textarea {
+      width: 100%;
+      min-height: 38px;
+      margin-top: 5px;
+      border: 1px solid #bfc5c9;
+      border-radius: 4px;
+      padding: 8px 10px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid rgba(22,103,168,.25);
+      border-color: var(--blue);
+    }
+    input:disabled { background: #eef0f1; color: #777; }
+    input[type="checkbox"] { width: 17px; min-height: 17px; margin: 0 8px 0 0; vertical-align: -3px; }
+    .key-field { flex: 1 1 390px; }
+    .priority-field { width: 125px; }
+    button.action, .file-button {
+      min-height: 38px;
+      border: 1px solid #777e84;
+      border-radius: 4px;
+      padding: 8px 13px;
+      background: #fff;
+      color: var(--ink);
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.action:hover:not(:disabled), button.action:focus-visible:not(:disabled) { background: #eceff0; }
+    button.action:disabled { opacity: .48; cursor: not-allowed; }
+    button.primary { border-color: #145d94; background: var(--blue); color: #fff; }
+    button.primary:hover:not(:disabled), button.primary:focus-visible:not(:disabled) { background: #115486; }
+    button.safe { border-color: #137442; background: var(--green); color: #fff; }
+    button.safe:hover:not(:disabled), button.safe:focus-visible:not(:disabled) { background: #106c3c; }
+    button.danger { border-color: #9a2731; background: var(--red); color: #fff; }
+    button.danger:hover:not(:disabled), button.danger:focus-visible:not(:disabled) { background: #a02832; }
+    .io-table { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+    .io-head, .io-row {
+      display: grid;
+      grid-template-columns: minmax(135px, 1.2fr) minmax(120px, 1fr) minmax(145px, 1fr) minmax(238px, 1.5fr);
+      align-items: center;
+      gap: 12px;
+      padding: 11px 14px;
+    }
+    .io-head { background: #e4e7e9; color: #555c62; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .045em; }
+    .io-row { min-height: 64px; border-top: 1px solid var(--line); }
+    .io-row:nth-child(odd) { background: #fafafa; }
+    .channel strong { display: block; font-size: 16px; }
+    .channel span { color: var(--muted); overflow-wrap: anywhere; }
+    .state { display: flex; align-items: center; gap: 9px; font-weight: 700; }
+    .state small { color: var(--muted); font-weight: 400; }
+    .row-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+    .row-actions button { min-width: 66px; }
+    .bulk-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    .note { color: var(--muted); font-size: 13px; }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .card { border: 1px solid var(--line); border-radius: 6px; padding: 14px; background: #fafafa; }
+    .card h3 { margin: 0 0 11px; font-size: 15px; }
+    .metric { display: flex; justify-content: space-between; gap: 14px; padding: 6px 0; border-top: 1px solid #e2e4e5; }
+    .metric:first-of-type { border-top: 0; }
+    .metric span { color: var(--muted); }
+    .metric strong { text-align: right; overflow-wrap: anywhere; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
+    .form-grid .wide { grid-column: 1 / -1; }
+    fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 18px 0 0; padding: 14px; }
+    legend { padding: 0 6px; font-weight: 700; }
+    .name-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+    .footer-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 18px; }
+    .upload-box { border: 2px dashed #bfc5c9; border-radius: 7px; padding: 18px; background: #fafafa; }
+    .upload-box input { border: 0; padding-left: 0; }
+    .progress { display: none; margin-top: 12px; height: 8px; border-radius: 9px; overflow: hidden; background: #d9dddf; }
+    .progress.visible { display: block; }
+    .progress span { display: block; width: 100%; height: 100%; background: var(--blue); animation: working 1.2s ease-in-out infinite alternate; }
+    @keyframes working { from { opacity: .35; transform: translateX(-45%); } to { opacity: 1; transform: translateX(0); } }
+    #toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 20;
+      max-width: min(430px, calc(100% - 36px));
+      padding: 12px 15px;
+      border-radius: 5px;
+      background: #25282c;
+      color: #fff;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: .18s ease;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.error { background: #8e222b; }
+    code { background: #eef0f1; border-radius: 3px; padding: 1px 4px; }
+    a { color: var(--blue); }
+    @media (max-width: 780px) {
+      main { width: min(100% - 18px, 1080px); margin-top: 14px; }
+      .panel { padding: 16px; }
+      .cards, .form-grid, .name-grid { grid-template-columns: 1fr; }
+      .form-grid .wide { grid-column: auto; }
+      .io-head { display: none; }
+      .io-row { grid-template-columns: 1fr 1fr; gap: 10px; }
+      .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
+    }
+    @media (max-width: 440px) {
+      header { padding-left: 8px; padding-right: 8px; }
+      nav { justify-content: flex-start; }
+      nav button { padding-left: 15px; padding-right: 15px; }
+      .io-row { grid-template-columns: 1fr; }
+      .row-actions { grid-column: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ESP32-S3-POE-ETH-8DI-8RO</h1>
+    <p>BACnet/IP I/O Controller</p>
+    <nav aria-label="Device sections">
+      <button type="button" class="tab active" data-panel="io">Relay Control</button>
+      <button type="button" class="tab" data-panel="system">BACnet &amp; Status</button>
+      <button type="button" class="tab" data-panel="config">Configuration</button>
+      <button type="button" class="tab" data-panel="firmware">Firmware</button>
+    </nav>
+  </header>
+
+  <main>
+    <div id="connectionBanner" class="banner" role="status">
+      <span id="connectionDot" class="connection-dot"></span>
+      <span id="connectionText">Connecting to device…</span>
+    </div>
+
+    <section id="io" class="panel active" aria-labelledby="io-title">
+      <h2 id="io-title">Relay Control</h2>
+      <p class="panel-intro">Live digital inputs and BACnet Binary Outputs. Output state is a command, not relay-contact feedback.</p>
+
+      <div class="toolbar">
+        <label class="key-field">Admin key
+          <input id="adminKey" type="password" inputmode="text" autocomplete="off" spellcheck="false" maxlength="64" placeholder="64 hexadecimal characters">
+          <small>Used locally to sign commands; never sent or saved by this page.</small>
+        </label>
+        <button id="showKey" type="button" class="action">Show</button>
+        <button id="clearKey" type="button" class="action">Clear</button>
+        <label class="priority-field">BACnet priority
+          <select id="relayPriority" aria-label="BACnet relay command priority"></select>
+        </label>
+      </div>
+      <div class="banner warning">
+        <strong>Safety:</strong>
+        <span>Verify wiring and controlled loads before commanding outputs. Priority 6 is reserved and unavailable.</span>
+      </div>
+
+      <div class="io-table" aria-live="polite">
+        <div class="io-head"><span>Channel</span><span>Digital input</span><span>Relay output</span><span>Command</span></div>
+        <div id="ioRows"></div>
+      </div>
+      <div class="bulk-actions">
+        <button id="releaseAll" type="button" class="action auth-action" disabled>Release all at priority</button>
+        <button id="allOff" type="button" class="action danger auth-action" disabled>All off at priority</button>
+      </div>
+      <p class="note">“Release” clears this page’s selected priority and allows the next active BACnet priority—or the relinquish default—to control the output.</p>
+    </section>
+
+    <section id="system" class="panel" aria-labelledby="system-title">
+      <h2 id="system-title">BACnet &amp; Device Status</h2>
+      <p class="panel-intro">Operational state updates once per second over Ethernet.</p>
+      <div class="cards">
+        <article class="card">
+          <h3>Network</h3>
+          <div class="metric"><span>Ethernet link</span><strong id="sEth">—</strong></div>
+          <div class="metric"><span>IPv4 address</span><strong id="sIp">—</strong></div>
+          <div class="metric"><span>BACnet/IP</span><strong id="sBacnet">—</strong></div>
+          <div class="metric"><span>UDP port</span><strong id="sPort">—</strong></div>
+          <div class="metric"><span>Packets received</span><strong id="sPackets">—</strong></div>
+        </article>
+        <article class="card">
+          <h3>BACnet identity</h3>
+          <div class="metric"><span>Device instance</span><strong id="sInstance">—</strong></div>
+          <div class="metric"><span>Device name</span><strong id="sDeviceName">—</strong></div>
+          <div class="metric"><span>Vendor</span><strong id="sVendor">—</strong></div>
+          <div class="metric"><span>Location</span><strong id="sLocation">—</strong></div>
+          <div class="metric"><span>Database revision</span><strong id="sDbRevision">—</strong></div>
+        </article>
+        <article class="card">
+          <h3>Hardware &amp; runtime</h3>
+          <div class="metric"><span>Relay controller</span><strong id="sRelayHealth">—</strong></div>
+          <div class="metric"><span>RTC</span><strong id="sRtc">—</strong></div>
+          <div class="metric"><span>Uptime</span><strong id="sUptime">—</strong></div>
+          <div class="metric"><span>Free / minimum heap</span><strong id="sHeap">—</strong></div>
+          <div class="metric"><span>Reboot count</span><strong id="sReboots">—</strong></div>
+        </article>
+        <article class="card">
+          <h3>Firmware</h3>
+          <div class="metric"><span>Product</span><strong id="sProduct">—</strong></div>
+          <div class="metric"><span>Version</span><strong id="sVersion">—</strong></div>
+          <div class="metric"><span>Build date</span><strong id="sBuild">—</strong></div>
+          <div class="metric"><span>Partition</span><strong id="sPartition">—</strong></div>
+        </article>
+        <article class="card">
+          <h3>Raw API</h3>
+          <p><a href="/api/v1/status" target="_blank" rel="noreferrer">Status JSON</a></p>
+          <p><a href="/api/v1/config" target="_blank" rel="noreferrer">Configuration JSON</a></p>
+          <p class="note">Read-only endpoints require no key. Mutations require a fresh HMAC challenge.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="config" class="panel" aria-labelledby="config-title">
+      <h2 id="config-title">Configuration</h2>
+      <p class="panel-intro">Saved changes are CRC-protected in NVS and take effect after reboot.</p>
+      <form id="configForm">
+        <div class="form-grid">
+          <label>Device instance<input id="cDeviceInstance" type="number" min="0" max="4194302" required></label>
+          <label>BACnet UDP port<input id="cBacnetPort" type="number" min="1" max="65535" required></label>
+          <label>Device name<input id="cDeviceName" maxlength="47" required></label>
+          <label>Hostname<input id="cHostname" maxlength="31" required></label>
+          <label>Vendor ID<input id="cVendorId" type="number" min="0" max="65535" required></label>
+          <label>Vendor name<input id="cVendorName" maxlength="47" required></label>
+          <label class="wide">Location<input id="cLocation" maxlength="63"></label>
+          <label class="wide"><span><input id="cRestore" type="checkbox">Restore saved relay state after safe startup</span><small>Disabled by default. Enable only when the site’s restart behavior has been reviewed.</small></label>
+        </div>
+
+        <fieldset>
+          <legend>IPv4 network</legend>
+          <div class="form-grid">
+            <label class="wide"><span><input id="cDhcp" type="checkbox">Use DHCP</span></label>
+            <label>Static IP address<input id="cIp" class="static-ip" maxlength="15" required></label>
+            <label>Netmask<input id="cNetmask" class="static-ip" maxlength="15" required></label>
+            <label>Gateway<input id="cGateway" class="static-ip" maxlength="15" required></label>
+            <label>DNS server<input id="cDns" class="static-ip" maxlength="15" required></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Digital inputs</legend>
+          <div id="inputNames" class="name-grid"></div>
+        </fieldset>
+        <fieldset>
+          <legend>Relay outputs</legend>
+          <div id="relayNames" class="name-grid"></div>
+        </fieldset>
+
+        <div class="footer-actions">
+          <button id="reloadConfig" type="button" class="action">Reload</button>
+          <button id="saveConfig" type="submit" class="action primary auth-action" disabled>Save configuration</button>
+          <button id="rebootConfig" type="button" class="action danger auth-action" disabled>Reboot device</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="firmware" class="panel" aria-labelledby="firmware-title">
+      <h2 id="firmware-title">Firmware Update</h2>
+      <p class="panel-intro">Upload only this project’s app-only <code>firmware-ota.bin</code>. The device verifies its hash, ESP image, and project identity before switching OTA slots.</p>
+      <div class="banner warning">
+        <strong>Keep power and Ethernet connected.</strong>
+        <span>A successful upload reboots the controller. Relay behavior follows the configured restart policy.</span>
+      </div>
+      <div class="upload-box">
+        <label>OTA application image<input id="otaFile" type="file" accept=".bin,application/octet-stream"></label>
+        <p id="otaInfo" class="note">No file selected.</p>
+        <button id="uploadOta" type="button" class="action primary auth-action" disabled>Verify and upload</button>
+        <div id="otaProgress" class="progress" aria-label="Firmware upload in progress"><span></span></div>
+      </div>
+      <div class="footer-actions">
+        <button id="rebootFirmware" type="button" class="action danger auth-action" disabled>Reboot without update</button>
+      </div>
+      <p class="note">Management is HTTP, not TLS. Use this page only on a trusted automation network. The entered key is retained only in this open page and is never written to browser storage.</p>
+    </section>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const enc = new TextEncoder();
+  const dec = new TextDecoder('ascii');
+  const relayCount = 8;
+  let latestStatus = null;
+  let latestConfig = null;
+  let toastTimer = 0;
+  let polling = false;
+  let cryptoReady = false;
+
+  const SHA256_K = new Uint32Array([
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+  ]);
+  const rotr = (v, n) => (v >>> n) | (v << (32 - n));
+
+  function sha256(input) {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+    const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
+    const padded = new Uint8Array(paddedLength);
+    padded.set(bytes);
+    padded[bytes.length] = 0x80;
+    const view = new DataView(padded.buffer);
+    const bits = bytes.length * 8;
+    view.setUint32(paddedLength - 8, Math.floor(bits / 0x100000000), false);
+    view.setUint32(paddedLength - 4, bits >>> 0, false);
+    const h = new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
+    const w = new Uint32Array(64);
+    for (let offset = 0; offset < paddedLength; offset += 64) {
+      for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4, false);
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(w[i-15],7) ^ rotr(w[i-15],18) ^ (w[i-15] >>> 3);
+        const s1 = rotr(w[i-2],17) ^ rotr(w[i-2],19) ^ (w[i-2] >>> 10);
+        w[i] = (w[i-16] + s0 + w[i-7] + s1) >>> 0;
+      }
+      let [a,b,c,d,e,f,g,hh] = h;
+      for (let i = 0; i < 64; i++) {
+        const s1 = rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
+        const ch = (e & f) ^ (~e & g);
+        const t1 = (hh + s1 + ch + SHA256_K[i] + w[i]) >>> 0;
+        const s0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
+        const maj = (a & b) ^ (a & c) ^ (b & c);
+        const t2 = (s0 + maj) >>> 0;
+        hh=g; g=f; f=e; e=(d+t1)>>>0; d=c; c=b; b=a; a=(t1+t2)>>>0;
+      }
+      h[0]=(h[0]+a)>>>0; h[1]=(h[1]+b)>>>0; h[2]=(h[2]+c)>>>0; h[3]=(h[3]+d)>>>0;
+      h[4]=(h[4]+e)>>>0; h[5]=(h[5]+f)>>>0; h[6]=(h[6]+g)>>>0; h[7]=(h[7]+hh)>>>0;
+    }
+    const digest = new Uint8Array(32);
+    const digestView = new DataView(digest.buffer);
+    h.forEach((value, i) => digestView.setUint32(i * 4, value, false));
+    return digest;
+  }
+
+  function concatBytes(...parts) {
+    const result = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+    let offset = 0;
+    for (const part of parts) { result.set(part, offset); offset += part.length; }
+    return result;
+  }
+
+  function hmacSha256(key, message) {
+    let normalized = key.length > 64 ? sha256(key) : new Uint8Array(key);
+    const inner = new Uint8Array(64);
+    const outer = new Uint8Array(64);
+    inner.fill(0x36); outer.fill(0x5c);
+    for (let i = 0; i < normalized.length; i++) { inner[i] ^= normalized[i]; outer[i] ^= normalized[i]; }
+    const result = sha256(concatBytes(outer, sha256(concatBytes(inner, message))));
+    normalized.fill(0); inner.fill(0); outer.fill(0);
+    return result;
+  }
+
+  const hex = bytes => Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+  function cryptoSelfTest() {
+    const shaOk = hex(sha256(enc.encode('abc'))) === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+    const hmacOk = hex(hmacSha256(new Uint8Array(20).fill(0x0b), enc.encode('Hi There'))) === 'b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7';
+    return shaOk && hmacOk;
+  }
+
+  function keyBytes() {
+    const value = $('adminKey').value.trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(value)) throw new Error('Enter the 64-character hexadecimal admin key first.');
+    const bytes = new Uint8Array(32);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(value.slice(i*2, i*2+2), 16);
+    return bytes;
+  }
+
+  async function responseJson(response) {
+    let value;
+    try { value = await response.json(); } catch (_) { throw new Error(`Device returned HTTP ${response.status} with invalid JSON.`); }
+    if (!response.ok) throw new Error(value.error || `Device returned HTTP ${response.status}.`);
+    return value;
+  }
+
+  async function authFetch(path, method, body, contentType) {
+    const bytes = body || new Uint8Array(0);
+    const key = keyBytes();
+    try {
+      const challenge = await responseJson(await fetch('/api/v1/auth/challenge', {cache:'no-store'}));
+      if (!/^[0-9a-fA-F]{32}$/.test(challenge.nonce || '')) throw new Error('Device returned an invalid authentication challenge.');
+      const bodyHash = hex(sha256(bytes));
+      const canonical = enc.encode(`BACNET-IO-AUTH-V1\n${method}\n${path}\n${challenge.nonce}\n${bytes.length}\n${bodyHash}\n`);
+      const signature = hex(hmacSha256(key, canonical));
+      const options = {
+        method,
+        cache: 'no-store',
+        headers: {
+          'Content-Type': contentType,
+          'X-Auth-Nonce': challenge.nonce,
+          'X-Content-SHA256': bodyHash,
+          'X-Authorization': signature
+        }
+      };
+      if (bytes.length) options.body = bytes;
+      return responseJson(await fetch(path, options));
+    } finally { key.fill(0); }
+  }
+
+  function notify(message, error=false) {
+    const toast = $('toast');
+    toast.textContent = message;
+    toast.className = error ? 'show error' : 'show';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.className = ''; }, 5000);
+  }
+
+  function setConnected(ok, message) {
+    $('connectionDot').classList.toggle('on', ok);
+    $('connectionBanner').classList.toggle('error', !ok);
+    $('connectionText').textContent = message;
+  }
+
+  function boolText(value, on='Online', off='Offline') { return value ? on : off; }
+  function formatUptime(seconds) {
+    seconds = Math.max(0, Number(seconds) || 0);
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${days ? days + 'd ' : ''}${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+  }
+
+  function renderStatus(status) {
+    latestStatus = status;
+    setConnected(true, `${status.ip_address} · firmware ${status.firmware_version} · ${status.bacnet_running ? 'BACnet/IP online' : 'BACnet/IP starting'}`);
+    const inputs = Number(status.digital_inputs_mask) || 0;
+    const outputs = Number(status.relay_outputs_mask) || 0;
+    const commands = Number(status.relay_commands_mask) || 0;
+    const priorities = Array.isArray(status.relay_active_priorities) ? status.relay_active_priorities : [];
+    for (let i = 0; i < relayCount; i++) {
+      const inputOn = (inputs & (1 << i)) !== 0;
+      const outputOn = (outputs & (1 << i)) !== 0;
+      const commandOn = (commands & (1 << i)) !== 0;
+      $(`diLamp${i}`).className = `lamp ${inputOn ? 'on' : 'off'}`;
+      $(`diState${i}`).textContent = inputOn ? 'Active' : 'Inactive';
+      $(`roLamp${i}`).className = `lamp ${status.relay_controller_healthy ? (outputOn ? 'on' : 'off') : 'fault'}`;
+      $(`roState${i}`).textContent = outputOn ? 'On' : 'Off';
+      const priority = Number(priorities[i]) || 0;
+      $(`roMeta${i}`).textContent = `${commandOn === outputOn ? 'applied' : 'pending'} · ${priority ? 'priority ' + priority : 'default'}`;
+    }
+    $('sEth').textContent = boolText(status.ethernet_link, 'Link up', 'Link down');
+    $('sIp').textContent = status.ipv4_assigned ? status.ip_address : 'Not assigned';
+    $('sBacnet').textContent = boolText(status.bacnet_running, 'Running', 'Stopped');
+    $('sPort').textContent = status.bacnet_udp_port;
+    $('sPackets').textContent = Number(status.bacnet_packets_received).toLocaleString();
+    $('sInstance').textContent = status.bacnet_device_instance;
+    $('sRelayHealth').textContent = boolText(status.relay_controller_healthy, 'Healthy', 'Fault');
+    $('sRtc').textContent = boolText(status.rtc_present, 'Present', 'Not detected');
+    $('sUptime').textContent = formatUptime(status.uptime_seconds);
+    $('sHeap').textContent = `${Number(status.free_heap_bytes).toLocaleString()} / ${Number(status.minimum_free_heap_bytes).toLocaleString()} B`;
+    $('sReboots').textContent = status.reboot_count;
+    $('sProduct').textContent = status.product;
+    $('sVersion').textContent = status.firmware_version;
+    $('sBuild').textContent = status.build_date;
+    $('sPartition').textContent = status.running_partition;
+  }
+
+  function renderConfig(config, fillForm=false) {
+    latestConfig = config;
+    for (let i = 0; i < relayCount; i++) {
+      $(`diName${i}`).textContent = config.input_names?.[i] || `DI${i+1}`;
+      $(`roName${i}`).textContent = config.relay_names?.[i] || `RO${i+1}`;
+    }
+    $('sDeviceName').textContent = config.device_name;
+    $('sVendor').textContent = `${config.vendor_name} (${config.vendor_id})`;
+    $('sLocation').textContent = config.location || '—';
+    $('sDbRevision').textContent = config.database_revision;
+    if (!fillForm) return;
+    $('cDeviceInstance').value = config.device_instance;
+    $('cBacnetPort').value = config.bacnet_port;
+    $('cDeviceName').value = config.device_name;
+    $('cHostname').value = config.hostname;
+    $('cVendorId').value = config.vendor_id;
+    $('cVendorName').value = config.vendor_name;
+    $('cLocation').value = config.location;
+    $('cRestore').checked = !!config.restore_relay_state;
+    $('cDhcp').checked = !!config.dhcp_enabled;
+    $('cIp').value = config.ip_address;
+    $('cNetmask').value = config.netmask;
+    $('cGateway').value = config.gateway;
+    $('cDns').value = config.dns_server;
+    for (let i = 0; i < relayCount; i++) {
+      $(`cInputName${i}`).value = config.input_names[i];
+      $(`cInputInvert${i}`).checked = (config.input_invert_mask & (1 << i)) !== 0;
+      $(`cRelayName${i}`).value = config.relay_names[i];
+    }
+    updateDhcpFields();
+  }
+
+  async function poll() {
+    if (polling) return;
+    polling = true;
+    try {
+      const status = await responseJson(await fetch('/api/v1/status', {cache:'no-store'}));
+      renderStatus(status);
+      if (!latestConfig) {
+        const config = await responseJson(await fetch('/api/v1/config', {cache:'no-store'}));
+        renderConfig(config, true);
+      }
+    } catch (error) {
+      setConnected(false, `Cannot reach device: ${error.message}`);
+    } finally { polling = false; }
+  }
+
+  async function loadConfig(fill=true) {
+    const config = await responseJson(await fetch('/api/v1/config', {cache:'no-store'}));
+    renderConfig(config, fill);
+    if (fill) notify('Configuration reloaded.');
+  }
+
+  async function relayCommand(channel, state) {
+    const priority = Number($('relayPriority').value);
+    const body = enc.encode(JSON.stringify({channel, state, priority}));
+    const result = await authFetch('/api/v1/relay', 'PUT', body, 'application/json');
+    notify(`RO${channel}: ${state} accepted; effective state is ${result.effective_active ? 'on' : 'off'}${result.active_priority ? ' at priority ' + result.active_priority : ''}.`);
+    await poll();
+  }
+
+  async function bulkRelay(state) {
+    const description = state === 'off' ? 'command all eight outputs off' : 'release all eight outputs';
+    if (!confirm(`This will ${description} at priority ${$('relayPriority').value}, one channel at a time. Continue?`)) return;
+    setAuthControls(false);
+    try {
+      for (let channel = 1; channel <= relayCount; channel++) await relayCommand(channel, state);
+      notify(`All outputs processed: ${state}.`);
+    } finally { updateAuthState(); }
+  }
+
+  function configPayload() {
+    let invertMask = 0;
+    const inputNames = [];
+    const relayNames = [];
+    for (let i = 0; i < relayCount; i++) {
+      if ($(`cInputInvert${i}`).checked) invertMask |= 1 << i;
+      inputNames.push($(`cInputName${i}`).value);
+      relayNames.push($(`cRelayName${i}`).value);
+    }
+    return {
+      device_instance: Number($('cDeviceInstance').value),
+      bacnet_port: Number($('cBacnetPort').value),
+      vendor_id: Number($('cVendorId').value),
+      input_invert_mask: invertMask,
+      dhcp_enabled: $('cDhcp').checked,
+      restore_relay_state: $('cRestore').checked,
+      hostname: $('cHostname').value,
+      device_name: $('cDeviceName').value,
+      vendor_name: $('cVendorName').value,
+      location: $('cLocation').value,
+      ip_address: $('cIp').value,
+      netmask: $('cNetmask').value,
+      gateway: $('cGateway').value,
+      dns_server: $('cDns').value,
+      input_names: inputNames,
+      relay_names: relayNames
+    };
+  }
+
+  async function saveConfiguration(event) {
+    event.preventDefault();
+    if (!$('configForm').reportValidity()) return;
+    if (!confirm('Save this configuration to NVS? A reboot is required before it takes effect.')) return;
+    const body = enc.encode(JSON.stringify(configPayload()));
+    setAuthControls(false);
+    try {
+      await authFetch('/api/v1/config', 'PUT', body, 'application/json');
+      notify('Configuration saved. Reboot to apply it.');
+      await loadConfig(false);
+    } catch (error) { notify(error.message, true); }
+    finally { updateAuthState(); }
+  }
+
+  async function rebootDevice() {
+    if (!confirm('Reboot the device now? I/O and network service will be interrupted.')) return;
+    setAuthControls(false);
+    try {
+      await authFetch('/api/v1/reboot', 'POST', new Uint8Array(0), 'application/octet-stream');
+      notify('Reboot accepted. Waiting for the device…');
+      latestConfig = null;
+      setConnected(false, 'Device is rebooting…');
+    } catch (error) { notify(error.message, true); updateAuthState(); }
+  }
+
+  function descriptorText(bytes, offset, length) {
+    const end = bytes.indexOf(0, offset);
+    return dec.decode(bytes.slice(offset, end >= offset && end < offset + length ? end : offset + length));
+  }
+
+  function inspectOta(bytes) {
+    const app = 32;
+    if (bytes.length < app + 256 || bytes[0] !== 0xe9) throw new Error('Not an ESP application image (missing image magic).');
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (view.getUint32(app, true) !== 0xabcd5432) throw new Error('Image has no valid ESP application descriptor.');
+    const version = descriptorText(bytes, app + 16, 32);
+    const project = descriptorText(bytes, app + 48, 32);
+    const idf = descriptorText(bytes, app + 112, 32);
+    if (project !== 'esp32_s3_poe_eth_8di_8ro_bacnet') throw new Error(`OTA project is “${project || 'unknown'}”, not this device firmware.`);
+    return {version, project, idf};
+  }
+
+  async function describeOta() {
+    const file = $('otaFile').files[0];
+    if (!file) { $('otaInfo').textContent = 'No file selected.'; return; }
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const info = inspectOta(bytes);
+      $('otaInfo').textContent = `${info.project} ${info.version} · ESP-IDF ${info.idf} · ${file.size.toLocaleString()} bytes · SHA-256 ${hex(sha256(bytes))}`;
+    } catch (error) { $('otaInfo').textContent = error.message; }
+  }
+
+  async function uploadOta() {
+    const file = $('otaFile').files[0];
+    if (!file) { notify('Select firmware-ota.bin first.', true); return; }
+    let bytes;
+    let info;
+    try { bytes = new Uint8Array(await file.arrayBuffer()); info = inspectOta(bytes); }
+    catch (error) { notify(error.message, true); return; }
+    if (!confirm(`Upload firmware ${info.version} (${file.size.toLocaleString()} bytes) and reboot?`)) return;
+    setAuthControls(false);
+    $('otaProgress').classList.add('visible');
+    try {
+      await authFetch('/api/v1/ota', 'POST', bytes, 'application/octet-stream');
+      notify('Firmware verified and accepted. Device is rebooting…');
+      latestConfig = null;
+      setConnected(false, 'Device is installing firmware and rebooting…');
+    } catch (error) { notify(error.message, true); updateAuthState(); }
+    finally { $('otaProgress').classList.remove('visible'); }
+  }
+
+  function updateDhcpFields() {
+    const disabled = $('cDhcp').checked;
+    document.querySelectorAll('.static-ip').forEach(input => input.disabled = disabled);
+  }
+  function setAuthControls(enabled) { document.querySelectorAll('.auth-action').forEach(button => button.disabled = !enabled); }
+  function updateAuthState() { setAuthControls(cryptoReady && /^[0-9a-fA-F]{64}$/.test($('adminKey').value.trim())); }
+
+  function buildUi() {
+    for (let priority = 1; priority <= 16; priority++) {
+      if (priority === 6) continue;
+      const option = document.createElement('option');
+      option.value = priority; option.textContent = priority + (priority === 8 ? ' (default)' : '');
+      option.selected = priority === 8;
+      $('relayPriority').append(option);
+    }
+    for (let i = 0; i < relayCount; i++) {
+      const row = document.createElement('div');
+      row.className = 'io-row';
+      row.innerHTML = `<div class="channel"><strong>CH${i+1}</strong><span><span id="diName${i}">DI${i+1}</span> / <span id="roName${i}">RO${i+1}</span></span></div>
+        <div class="state"><span id="diLamp${i}" class="lamp"></span><span id="diState${i}">—</span></div>
+        <div class="state"><span id="roLamp${i}" class="lamp"></span><span><span id="roState${i}">—</span><small id="roMeta${i}">—</small></span></div>
+        <div class="row-actions"><button type="button" class="action safe auth-action" data-channel="${i+1}" data-state="on" disabled>On</button><button type="button" class="action auth-action" data-channel="${i+1}" data-state="off" disabled>Off</button><button type="button" class="action auth-action" data-channel="${i+1}" data-state="relinquish" disabled>Release</button></div>`;
+      $('ioRows').append(row);
+      const inputLabel = document.createElement('label');
+      inputLabel.innerHTML = `DI${i+1} name<input id="cInputName${i}" maxlength="47" required><small><input id="cInputInvert${i}" type="checkbox">Active low (invert)</small>`;
+      $('inputNames').append(inputLabel);
+      const relayLabel = document.createElement('label');
+      relayLabel.innerHTML = `RO${i+1} name<input id="cRelayName${i}" maxlength="47" required>`;
+      $('relayNames').append(relayLabel);
+    }
+  }
+
+  buildUi();
+  document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(item => item.classList.toggle('active', item === tab));
+    document.querySelectorAll('.panel').forEach(panel => panel.classList.toggle('active', panel.id === tab.dataset.panel));
+  }));
+  $('ioRows').addEventListener('click', async event => {
+    const button = event.target.closest('button[data-channel]');
+    if (!button) return;
+    button.disabled = true;
+    try { await relayCommand(Number(button.dataset.channel), button.dataset.state); }
+    catch (error) { notify(error.message, true); }
+    finally { updateAuthState(); }
+  });
+  $('adminKey').addEventListener('input', updateAuthState);
+  $('showKey').addEventListener('click', () => { const input=$('adminKey'); input.type=input.type === 'password' ? 'text' : 'password'; $('showKey').textContent=input.type === 'password' ? 'Show' : 'Hide'; });
+  $('clearKey').addEventListener('click', () => { $('adminKey').value=''; $('adminKey').type='password'; $('showKey').textContent='Show'; updateAuthState(); });
+  $('allOff').addEventListener('click', () => bulkRelay('off').catch(error => notify(error.message, true)));
+  $('releaseAll').addEventListener('click', () => bulkRelay('relinquish').catch(error => notify(error.message, true)));
+  $('cDhcp').addEventListener('change', updateDhcpFields);
+  $('reloadConfig').addEventListener('click', () => loadConfig(true).catch(error => notify(error.message, true)));
+  $('configForm').addEventListener('submit', saveConfiguration);
+  $('rebootConfig').addEventListener('click', rebootDevice);
+  $('rebootFirmware').addEventListener('click', rebootDevice);
+  $('otaFile').addEventListener('change', describeOta);
+  $('uploadOta').addEventListener('click', uploadOta);
+  cryptoReady = cryptoSelfTest();
+  if (!cryptoReady) notify('This browser failed the command-signing self-test. Read-only monitoring remains available.', true);
+  updateAuthState();
+  poll();
+  setInterval(poll, 1000);
+  </script>
+</body>
+</html>

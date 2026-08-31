@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #include "web_admin.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
 #include <string.h>
@@ -26,12 +27,16 @@
 #include "firmware.h"
 
 #define CONFIG_BODY_MAX 8192U
+#define RELAY_BODY_MAX 256U
 #define OTA_RECEIVE_BUFFER 4096U
 #define CONFIG_RECEIVE_DEADLINE_US (15LL * 1000LL * 1000LL)
 #define OTA_RECEIVE_DEADLINE_US (5LL * 60LL * 1000LL * 1000LL)
 
 static const char *TAG = "web_admin";
 static httpd_handle_t s_server;
+
+extern const char web_index_start[] asm("_binary_index_html_start");
+extern const char web_index_end[] asm("_binary_index_html_end");
 
 static esp_err_t send_json_text(httpd_req_t *request, const char *status, const char *json)
 {
@@ -93,15 +98,16 @@ static bool request_authorize(httpd_req_t *request, const char *method, const ch
 
 static esp_err_t root_handler(httpd_req_t *request)
 {
-    static const char page[] =
-        "<!doctype html><meta charset=utf-8><title>BACnet I/O</title>"
-        "<h1>ESP32-S3 BACnet/IP I/O</h1>"
-        "<p>Read-only status: <a href=/api/v1/status>/api/v1/status</a></p>"
-        "<p>Configuration and OTA mutations require HMAC authentication. "
-        "Use <code>tools/device_admin.py</code>.</p>";
     httpd_resp_set_type(request, "text/html; charset=utf-8");
     httpd_resp_set_hdr(request, "Cache-Control", "no-store");
-    return httpd_resp_send(request, page, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_set_hdr(request, "X-Content-Type-Options", "nosniff");
+    httpd_resp_set_hdr(request, "Referrer-Policy", "no-referrer");
+    httpd_resp_set_hdr(request, "Content-Security-Policy",
+        "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+        "connect-src 'self'; img-src 'self' data:; object-src 'none'; "
+        "base-uri 'none'; frame-ancestors 'none'");
+    return httpd_resp_send(request, web_index_start,
+        (ssize_t)(web_index_end - web_index_start));
 }
 
 static esp_err_t status_handler(httpd_req_t *request)
@@ -135,6 +141,12 @@ static esp_err_t status_handler(httpd_req_t *request)
     cJSON_AddNumberToObject(root, "digital_inputs_mask", board_io_inputs_mask());
     cJSON_AddNumberToObject(root, "relay_outputs_mask", board_io_relays_mask());
     cJSON_AddNumberToObject(root, "relay_commands_mask", board_io_relay_commands_mask());
+    unsigned relay_priorities[FW_RELAY_COUNT] = {0};
+    (void)bacnet_app_relay_priorities(relay_priorities);
+    cJSON *priorities = cJSON_AddArrayToObject(root, "relay_active_priorities");
+    for (unsigned i = 0; i < FW_RELAY_COUNT; ++i) {
+        cJSON_AddItemToArray(priorities, cJSON_CreateNumber(relay_priorities[i]));
+    }
     cJSON_AddBoolToObject(root, "relay_controller_healthy", board_io_relay_controller_healthy());
     cJSON_AddBoolToObject(root, "rtc_present", board_io_rtc_present());
     cJSON_AddNumberToObject(root, "free_heap_bytes", esp_get_free_heap_size());
@@ -373,6 +385,81 @@ static esp_err_t config_put_handler(httpd_req_t *request)
         "{\"saved\":true,\"persistent\":true,\"reboot_required\":true}");
 }
 
+static esp_err_t relay_put_handler(httpd_req_t *request)
+{
+    size_t body_length = 0;
+    uint8_t *body = receive_body(request, RELAY_BODY_MAX, &body_length);
+    if (!body) {
+        return send_error(request, "400 Bad Request", "invalid relay command body");
+    }
+    char body_hash[FW_AUTH_HEX_SHA256_LEN + 1];
+    char reason[128];
+    if (!auth_sha256_hex(body, body_length, body_hash) ||
+        !request_authorize(request, "PUT", "/api/v1/relay", body_length,
+            body_hash, reason, sizeof(reason))) {
+        free(body);
+        return send_error(request, "401 Unauthorized", reason);
+    }
+
+    cJSON *json = cJSON_ParseWithLength((char *)body, body_length);
+    free(body);
+    if (!json || !cJSON_IsObject(json)) {
+        cJSON_Delete(json);
+        return send_error(request, "400 Bad Request", "body must be a JSON object");
+    }
+
+    uint32_t channel = 0;
+    uint32_t priority = 8;
+    cJSON *state = cJSON_GetObjectItemCaseSensitive(json, "state");
+    bool valid = json_copy_number(json, "channel", FW_RELAY_COUNT,
+        &channel, reason, sizeof(reason)) && channel >= 1U &&
+        json_copy_number(json, "priority", 16U, &priority, reason, sizeof(reason)) &&
+        priority >= 1U && priority != 6U && cJSON_IsString(state) && state->valuestring;
+    bacnet_relay_command_t command = BACNET_RELAY_COMMAND_OFF;
+    const char *requested_state = NULL;
+    if (valid && strcmp(state->valuestring, "on") == 0) {
+        command = BACNET_RELAY_COMMAND_ON;
+        requested_state = "on";
+    } else if (valid && strcmp(state->valuestring, "off") == 0) {
+        command = BACNET_RELAY_COMMAND_OFF;
+        requested_state = "off";
+    } else if (valid && strcmp(state->valuestring, "relinquish") == 0) {
+        command = BACNET_RELAY_COMMAND_RELINQUISH;
+        requested_state = "relinquish";
+    } else {
+        valid = false;
+        snprintf(reason, sizeof(reason),
+            "state must be on, off, or relinquish; priority 6 is reserved");
+    }
+    cJSON_Delete(json);
+    if (!valid) {
+        return send_error(request, "400 Bad Request", reason);
+    }
+
+    bacnet_relay_status_t status = {0};
+    esp_err_t result = bacnet_app_relay_command(channel - 1U, command,
+        priority, &status);
+    if (result == ESP_ERR_INVALID_STATE || result == ESP_ERR_TIMEOUT) {
+        return send_error(request, "503 Service Unavailable",
+            "BACnet relay service is not ready");
+    }
+    if (result != ESP_OK) {
+        return send_error(request, "500 Internal Server Error", esp_err_to_name(result));
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "accepted", true);
+    cJSON_AddNumberToObject(response, "channel", channel);
+    cJSON_AddStringToObject(response, "requested_state", requested_state);
+    cJSON_AddBoolToObject(response, "effective_active", status.active);
+    cJSON_AddNumberToObject(response, "active_priority", status.active_priority);
+    cJSON_AddNumberToObject(response, "relay_outputs_mask", board_io_relays_mask());
+    cJSON_AddNumberToObject(response, "relay_commands_mask", board_io_relay_commands_mask());
+    esp_err_t send_result = send_json_object(request, "200 OK", response);
+    cJSON_Delete(response);
+    return send_result;
+}
+
 static void delayed_restart_task(void *context)
 {
     (void)context;
@@ -500,7 +587,7 @@ esp_err_t web_admin_start(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = FW_HTTP_PORT;
-    config.max_uri_handlers = 8;
+    config.max_uri_handlers = 9;
     config.stack_size = 8192;
     config.lru_purge_enable = true;
     ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG, "start HTTP server");
@@ -511,6 +598,7 @@ esp_err_t web_admin_start(void)
         {.uri = "/api/v1/auth/challenge", .method = HTTP_GET, .handler = challenge_handler},
         {.uri = "/api/v1/config", .method = HTTP_GET, .handler = config_get_handler},
         {.uri = "/api/v1/config", .method = HTTP_PUT, .handler = config_put_handler},
+        {.uri = "/api/v1/relay", .method = HTTP_PUT, .handler = relay_put_handler},
         {.uri = "/api/v1/reboot", .method = HTTP_POST, .handler = reboot_handler},
         {.uri = "/api/v1/ota", .method = HTTP_POST, .handler = ota_handler},
     };
