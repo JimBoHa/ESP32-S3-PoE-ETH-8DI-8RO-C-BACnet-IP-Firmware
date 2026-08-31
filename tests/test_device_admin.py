@@ -7,7 +7,9 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 
+from tools import device_admin
 from tools.device_admin import (
     APP_DESC_MAGIC,
     APP_DESC_OFFSET,
@@ -76,6 +78,45 @@ class DeviceAdminTests(unittest.TestCase):
         image[APP_DESC_OFFSET + 48 : APP_DESC_OFFSET + 53] = b"other"
         with self.assertRaises(AdminError):
             inspect_ota_image(bytes(image))
+
+    def test_relay_set_command(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            key_path = Path(directory) / "device.key"
+            key_path.write_text("ab" * 32 + "\n", encoding="ascii")
+            key_path.chmod(0o600)
+            with patch("tools.device_admin.authenticated_request", return_value={"accepted": True}) as request:
+                self.assertEqual(
+                    device_admin.main(
+                        [
+                            "--device", "192.0.2.8",
+                            "--key-file", str(key_path),
+                            "relay-set", "--channel", "3", "--state", "on",
+                            "--priority", "8",
+                        ]
+                    ),
+                    0,
+                )
+            args = request.call_args.args
+            self.assertEqual(args[2:4], ("PUT", "/api/v1/relay"))
+            self.assertEqual(
+                args[4],
+                b'{"channel":3,"priority":8,"state":"on"}',
+            )
+
+    def test_relay_set_rejects_reserved_priority(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            key_path = Path(directory) / "device.key"
+            key_path.write_text("ab" * 32 + "\n", encoding="ascii")
+            key_path.chmod(0o600)
+            with self.assertRaisesRegex(AdminError, "reserved priority 6"):
+                device_admin.main(
+                    [
+                        "--device", "192.0.2.8",
+                        "--key-file", str(key_path),
+                        "relay-set", "--channel", "3", "--state", "off",
+                        "--priority", "6",
+                    ]
+                )
 
 
 if __name__ == "__main__":

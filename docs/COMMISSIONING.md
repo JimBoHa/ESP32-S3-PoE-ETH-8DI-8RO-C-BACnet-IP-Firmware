@@ -1,6 +1,6 @@
 # Commissioning and recovery
 
-Version 0.9.1 has completed initial target-board bring-up but not the full
+Version 0.10.0 has completed initial target-board bring-up but not the full
 hardware test checklist. Use a bench unit, disconnect relay loads, and preserve
 a way to restore the manufacturer's image if that matters to the site.
 
@@ -69,6 +69,12 @@ Check product, firmware version, partition, Ethernet link, IPv4 state,
 TCA9554 health, RTC presence, input mask, and relay mask. Relays should be zero
 with default settings.
 
+Open `http://DEVICE_IP/` to use the embedded management interface. Live status
+does not require a key. Enter the saved admin key only when commanding a relay,
+saving configuration, uploading OTA firmware, or rebooting. The page does not
+store the key, but it is served over HTTP; use it only across a trusted
+automation/management network.
+
 ## 6. Apply site configuration
 
 Create a partial JSON file. For a static address on the example subnet:
@@ -110,6 +116,15 @@ Reconnect at the new address and read configuration/status again.
 6. Relinquish the command and verify the priority array/default behavior.
 7. Confirm the correct physical relay and status indicators before connecting
    any load.
+
+For a scripted authenticated check outside a BACnet workstation:
+
+```sh
+python tools/device_admin.py --device DEVICE_IP --key-file device.key \
+  relay-set --channel 1 --state on --priority 8
+python tools/device_admin.py --device DEVICE_IP --key-file device.key \
+  relay-set --channel 1 --state relinquish --priority 8
+```
 
 Duplicate Device instances break discovery and bindings. Assign a site-unique
 instance before connecting multiple units.
