@@ -1,8 +1,8 @@
 # Commissioning and recovery
 
-Version 0.9.0 has not yet completed physical target testing. Use a bench unit,
-disconnect relay loads, and preserve a way to restore the manufacturer's image
-if that matters to the site.
+Version 0.9.1 has completed initial target-board bring-up but not the full
+hardware test checklist. Use a bench unit, disconnect relay loads, and preserve
+a way to restore the manufacturer's image if that matters to the site.
 
 ## 1. Verify the target
 
