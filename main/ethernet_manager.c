@@ -113,6 +113,17 @@ esp_err_t ethernet_manager_init(const firmware_config_t *config)
     if (!config) {
         return ESP_ERR_INVALID_ARG;
     }
+
+    /* SPI Ethernet MACs use a GPIO interrupt to signal received frames. The
+       W5500 driver adds its per-pin handler during esp_eth_driver_install(),
+       so the shared GPIO ISR service must already exist at that point. */
+    esp_err_t isr_result = gpio_install_isr_service(0);
+    ESP_RETURN_ON_FALSE(isr_result == ESP_OK || isr_result == ESP_ERR_INVALID_STATE,
+        isr_result, TAG, "install GPIO ISR service");
+    if (isr_result == ESP_OK) {
+        ESP_LOGI(TAG, "GPIO ISR service installed");
+    }
+
     s_events = xEventGroupCreate();
     if (!s_events) {
         return ESP_ERR_NO_MEM;

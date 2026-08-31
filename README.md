@@ -5,9 +5,11 @@ commands, and device health from the Waveshare
 `ESP32-S3-POE-ETH-8DI-8RO-C` as BACnet/IP objects. It replaces the factory
 application and provides authenticated firmware updates over Ethernet.
 
-> **Pre-hardware release:** version 0.9.0 builds and passes host tests, but has
-> not yet been flashed to or hardware-in-the-loop tested on the target board.
-> Disconnect controlled loads during first commissioning.
+> **Hardware bring-up release:** version 0.9.1 has passed host tests and initial
+> target-board checks for safe relay startup, RTC detection, W5500 link, DHCP,
+> ICMP, management HTTP, and BACnet packet reception. The full
+> hardware-in-the-loop checklist is still incomplete. Disconnect controlled
+> loads during first commissioning.
 
 This source targets only the 16 MB flash / 8 MB PSRAM model built around an
 `ESP32-S3-WROOM-1U-N16R8`, W5500 Ethernet controller, and TCA9554 relay
@@ -72,14 +74,14 @@ tests/run_host_tests.sh
 python tools/package_release.py
 ```
 
-The package is written to `release/v0.9.0/` and contains:
+The package is written to `release/v0.9.1/` and contains:
 
 - `initial-flash.bin` for the first USB installation;
 - `firmware-ota.bin` for later Ethernet updates;
 - individual bootloader, partition-table, and OTA-data images;
 - a manifest, SHA-256 checksum list, and license notices.
 
-The application partition is 6 MiB. Version 0.9.0 occupies about 0.51 MiB.
+The application partition is 6 MiB. Version 0.9.1 occupies about 0.51 MiB.
 
 ## Persistent configuration
 
@@ -142,7 +144,7 @@ Upload only `firmware-ota.bin`, never the merged initial-flash image:
 python tools/device_admin.py \
   --device 192.168.75.153 \
   --key-file device.key \
-  ota --file release/v0.9.0/firmware-ota.bin --yes
+  ota --file release/v0.9.1/firmware-ota.bin --yes
 ```
 
 The client checks the ESP image header and project identity. The device signs
@@ -167,7 +169,8 @@ ACLs. Read [Security](docs/SECURITY.md) before deployment.
 
 ## Current limitations
 
-- Not yet tested on physical target hardware and not BTL tested or listed.
+- Initial physical target bring-up only; the full hardware checklist is not
+  complete, and the firmware is not BTL tested or listed.
 - Local-subnet BACnet/IP only; no BBMD registration or BACnet/SC.
 - No CAN, TF-card, buzzer, RGB LED, or RTC timekeeping objects yet.
 - IPv4 only; no IPv6.
