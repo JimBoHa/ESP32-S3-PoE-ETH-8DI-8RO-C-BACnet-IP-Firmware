@@ -39,6 +39,13 @@ command line, place it in source control, send it in tickets/chat, or include it
 in a release package. The supplied client accepts `--key-file` or the
 `BACNET_IO_ADMIN_KEY_FILE` path environment variable.
 
+The embedded page can also sign commands in the browser without sending or
+persisting the key. However, the page itself arrives over unauthenticated HTTP.
+An active network attacker could replace its JavaScript and capture a key as it
+is entered. Use key-bearing browser sessions only on a trusted, restricted
+management network; prefer the locally installed Python client across a path
+that is not fully trusted.
+
 The API intentionally has no network key-recovery or key-rotation endpoint:
 plain HTTP cannot confidentially transport a replacement key. If the key is
 lost or suspected compromised, perform a controlled USB reflash/flash erase

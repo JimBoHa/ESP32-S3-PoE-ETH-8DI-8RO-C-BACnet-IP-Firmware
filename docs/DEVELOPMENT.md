@@ -31,9 +31,20 @@ idf.py size
 git diff --check
 ```
 
-Host tests cover persistent-model validation/CRC behavior and the management
-client's URL, key, OTA descriptor, canonical request, and HMAC logic. The IDF
-build compiles the real ESP32-S3 application and selected bacnet-stack sources.
+Host tests cover persistent-model validation/CRC behavior; management-client
+URL, key, OTA descriptor, canonical request, HMAC, and relay command behavior;
+and static integrity of the embedded management interface. The IDF build
+compiles the real ESP32-S3 application, embedded page, and selected
+bacnet-stack sources.
+
+Initial 0.10.0 bench validation on 2026-08-31 read each Binary Input over
+BACnet/IP for at least three seconds and commanded each Binary Output as the
+only active channel for at least three seconds. Every BACnet write was read
+back and cross-checked against the TCA9554 command mask, then turned off and
+relinquished. The DI channels remained inactive because no electrical stimulus
+or loopback fixture was attached; this validates their BACnet read path, not
+their optocoupler polarity or field wiring. The final relay mask and all
+priority arrays were zero.
 
 Tests still required on physical hardware:
 

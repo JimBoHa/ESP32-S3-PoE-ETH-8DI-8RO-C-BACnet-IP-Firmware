@@ -1,6 +1,6 @@
 # BACnet implementation summary
 
-This is an engineering PICS-style summary for firmware 0.9.1. It is not a BTL
+This is an engineering PICS-style summary for firmware 0.10.0. It is not a BTL
 test report, listing, or certification claim.
 
 ## Device and data link
@@ -63,6 +63,10 @@ support COV.
 The firmware callback applies effective Present_Value to the TCA9554. If the
 I2C write fails, all relay objects report `UNRELIABLE_OTHER`. No auxiliary
 contact exists, so the value is not physical feedback.
+
+Authenticated HTTP and web-interface relay commands update the same priority
+array and invoke the same physical-output callback as BACnet WriteProperty;
+they do not maintain a parallel or hidden relay state.
 
 ### Status Binary Inputs 1001-1004
 

@@ -27,6 +27,8 @@ idf_component_register(
         lwip
         mbedtls
         nvs_flash
+    EMBED_FILES
+        "web/index.html"
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE
