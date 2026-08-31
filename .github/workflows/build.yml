@@ -1,0 +1,39 @@
+name: build-and-test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run host tests
+        run: tests/run_host_tests.sh
+
+  esp32s3-firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: espressif/idf:v5.5.4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build firmware
+        run: |
+          idf.py set-target esp32s3
+          idf.py build
+      - name: Run host tests
+        run: tests/run_host_tests.sh
+      - name: Package flash and OTA images
+        run: python tools/package_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: esp32-s3-bacnet-firmware
+          path: release/v*/
+          if-no-files-found: error
