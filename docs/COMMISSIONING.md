@@ -1,6 +1,6 @@
 # Commissioning and recovery
 
-Version 0.1.0 has not yet completed physical target testing. Use a bench unit,
+Version 0.9.0 has not yet completed physical target testing. Use a bench unit,
 disconnect relay loads, and preserve a way to restore the manufacturer's image
 if that matters to the site.
 

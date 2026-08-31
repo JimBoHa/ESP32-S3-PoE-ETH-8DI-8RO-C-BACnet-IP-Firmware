@@ -5,7 +5,7 @@ commands, and device health from the Waveshare
 `ESP32-S3-POE-ETH-8DI-8RO-C` as BACnet/IP objects. It replaces the factory
 application and provides authenticated firmware updates over Ethernet.
 
-> **Pre-hardware release:** version 0.1.0 builds and passes host tests, but has
+> **Pre-hardware release:** version 0.9.0 builds and passes host tests, but has
 > not yet been flashed to or hardware-in-the-loop tested on the target board.
 > Disconnect controlled loads during first commissioning.
 
@@ -72,14 +72,14 @@ tests/run_host_tests.sh
 python tools/package_release.py
 ```
 
-The package is written to `release/v0.1.0/` and contains:
+The package is written to `release/v0.9.0/` and contains:
 
 - `initial-flash.bin` for the first USB installation;
 - `firmware-ota.bin` for later Ethernet updates;
 - individual bootloader, partition-table, and OTA-data images;
 - a manifest, SHA-256 checksum list, and license notices.
 
-The application partition is 6 MiB. Version 0.1.0 occupies about 0.51 MiB.
+The application partition is 6 MiB. Version 0.9.0 occupies about 0.51 MiB.
 
 ## Persistent configuration
 
@@ -142,7 +142,7 @@ Upload only `firmware-ota.bin`, never the merged initial-flash image:
 python tools/device_admin.py \
   --device 192.168.75.153 \
   --key-file device.key \
-  ota --file release/v0.1.0/firmware-ota.bin --yes
+  ota --file release/v0.9.0/firmware-ota.bin --yes
 ```
 
 The client checks the ESP image header and project identity. The device signs

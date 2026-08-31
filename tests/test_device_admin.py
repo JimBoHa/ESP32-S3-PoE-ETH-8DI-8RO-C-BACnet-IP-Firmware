@@ -61,13 +61,13 @@ class DeviceAdminTests(unittest.TestCase):
         image = bytearray(APP_DESC_OFFSET + 256)
         image[0] = 0xE9
         struct.pack_into("<I", image, APP_DESC_OFFSET, APP_DESC_MAGIC)
-        image[APP_DESC_OFFSET + 16 : APP_DESC_OFFSET + 21] = b"0.1.0"
+        image[APP_DESC_OFFSET + 16 : APP_DESC_OFFSET + 21] = b"0.9.0"
         project = EXPECTED_PROJECT.encode("ascii")
         image[APP_DESC_OFFSET + 48 : APP_DESC_OFFSET + 48 + len(project)] = project
         image[APP_DESC_OFFSET + 112 : APP_DESC_OFFSET + 117] = b"v5.5.4"
         info = inspect_ota_image(bytes(image))
         self.assertEqual(info["project"], EXPECTED_PROJECT)
-        self.assertEqual(info["version"], "0.1.0")
+        self.assertEqual(info["version"], "0.9.0")
 
     def test_reject_wrong_ota_project(self) -> None:
         image = bytearray(APP_DESC_OFFSET + 256)
