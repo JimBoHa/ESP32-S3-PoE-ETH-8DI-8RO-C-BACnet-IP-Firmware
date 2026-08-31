@@ -2,6 +2,8 @@ name: build-and-test
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -25,7 +27,9 @@ jobs:
         with:
           submodules: recursive
       - name: Build firmware
+        shell: bash
         run: |
+          source /opt/esp/idf/export.sh
           idf.py set-target esp32s3
           idf.py build
       - name: Run host tests
