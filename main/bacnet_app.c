@@ -57,6 +57,7 @@ static volatile bool s_running;
 static volatile uint32_t s_packet_count;
 static uint8_t s_pdu_buffer[BIP_MPDU_MAX];
 static SemaphoreHandle_t s_start_signal;
+static SemaphoreHandle_t s_object_mutex;
 static esp_err_t s_start_result;
 
 static bool binary_output_write_property(BACNET_WRITE_PROPERTY_DATA *data)
@@ -144,12 +145,11 @@ static BACNET_RESTART_REASON restart_reason_to_bacnet(void)
     }
 }
 
-static void relay_write_callback(uint32_t instance, BACNET_BINARY_PV old_value,
+static esp_err_t relay_effective_value_apply(uint32_t instance,
     BACNET_BINARY_PV value)
 {
-    (void)old_value;
     if (instance < 1U || instance > FW_RELAY_COUNT) {
-        return;
+        return ESP_ERR_INVALID_ARG;
     }
     esp_err_t result = board_io_relay_set(instance - 1U, value == BINARY_ACTIVE);
     BACNET_RELIABILITY reliability = result == ESP_OK ? RELIABILITY_NO_FAULT_DETECTED :
@@ -161,6 +161,14 @@ static void relay_write_callback(uint32_t instance, BACNET_BINARY_PV old_value,
         ESP_LOGE(TAG, "Relay %lu command failed: %s", (unsigned long)instance,
             esp_err_to_name(result));
     }
+    return result;
+}
+
+static void relay_write_callback(uint32_t instance, BACNET_BINARY_PV old_value,
+    BACNET_BINARY_PV value)
+{
+    (void)old_value;
+    (void)relay_effective_value_apply(instance, value);
 }
 
 static void create_binary_input(uint32_t instance, const char *name, const char *description)
@@ -343,6 +351,7 @@ static void bacnet_task(void *context)
 {
     (void)context;
     address_init();
+    xSemaphoreTake(s_object_mutex, portMAX_DELAY);
     bool initialized = initialize_objects();
     if (initialized) {
         register_service_handlers();
@@ -350,6 +359,7 @@ static void bacnet_task(void *context)
         update_binary_objects();
         update_analog_status_objects();
     }
+    xSemaphoreGive(s_object_mutex);
     s_start_result = initialized ? ESP_OK : ESP_FAIL;
     xSemaphoreGive(s_start_signal);
     if (!initialized) {
@@ -367,7 +377,9 @@ static void bacnet_task(void *context)
             continue;
         }
         uint32_t revision = ethernet_manager_network_revision();
+        xSemaphoreTake(s_object_mutex, portMAX_DELAY);
         update_network_port(&info);
+        xSemaphoreGive(s_object_mutex);
         bip_esp32_configure(info.ip.addr, info.netmask.addr, info.gw.addr,
             s_config.bacnet_port);
         if (!bip_init("eth0")) {
@@ -377,18 +389,23 @@ static void bacnet_task(void *context)
         }
         int64_t last_timer_us = esp_timer_get_time();
         int64_t last_second_us = last_timer_us;
+        xSemaphoreTake(s_object_mutex, portMAX_DELAY);
         update_binary_objects();
         update_analog_status_objects();
+        xSemaphoreGive(s_object_mutex);
         s_running = true;
         ESP_LOGI(TAG, "BACnet/IP Device %lu listening on UDP %u",
             (unsigned long)s_config.device_instance, s_config.bacnet_port);
+        xSemaphoreTake(s_object_mutex, portMAX_DELAY);
         Send_I_Am(&Handler_Transmit_Buffer[0]);
+        xSemaphoreGive(s_object_mutex);
 
         while (ethernet_manager_has_ip() &&
             ethernet_manager_network_revision() == revision) {
             BACNET_ADDRESS source = {0};
             uint16_t length = bip_receive(&source, s_pdu_buffer,
                 sizeof(s_pdu_buffer), 20);
+            xSemaphoreTake(s_object_mutex, portMAX_DELAY);
             if (length) {
                 npdu_handler(&source, s_pdu_buffer, length);
                 s_packet_count++;
@@ -410,6 +427,7 @@ static void bacnet_task(void *context)
                 taskYIELD();
             }
             update_binary_objects();
+            xSemaphoreGive(s_object_mutex);
         }
 
         s_running = false;
@@ -424,13 +442,21 @@ esp_err_t bacnet_app_start(const firmware_config_t *config)
         return ESP_ERR_INVALID_ARG;
     }
     s_config = *config;
+    s_object_mutex = xSemaphoreCreateMutex();
+    if (!s_object_mutex) {
+        return ESP_ERR_NO_MEM;
+    }
     s_start_signal = xSemaphoreCreateBinary();
     if (!s_start_signal) {
+        vSemaphoreDelete(s_object_mutex);
+        s_object_mutex = NULL;
         return ESP_ERR_NO_MEM;
     }
     if (xTaskCreate(bacnet_task, "bacnet_ip", 10240, NULL, 6, NULL) != pdPASS) {
         vSemaphoreDelete(s_start_signal);
         s_start_signal = NULL;
+        vSemaphoreDelete(s_object_mutex);
+        s_object_mutex = NULL;
         return ESP_ERR_NO_MEM;
     }
     if (xSemaphoreTake(s_start_signal, pdMS_TO_TICKS(5000)) != pdTRUE) {
@@ -450,4 +476,47 @@ bool bacnet_app_running(void)
 uint32_t bacnet_app_packet_count(void)
 {
     return s_packet_count;
+}
+
+esp_err_t bacnet_app_relay_command(unsigned index, bacnet_relay_command_t command,
+    unsigned priority, bacnet_relay_status_t *status)
+{
+    if (index >= FW_RELAY_COUNT || command > BACNET_RELAY_COMMAND_RELINQUISH ||
+        priority < 1U || priority > BACNET_MAX_PRIORITY || priority == 6U) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!s_running || !s_object_mutex) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (xSemaphoreTake(s_object_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    uint32_t instance = index + 1U;
+    bool updated = command == BACNET_RELAY_COMMAND_RELINQUISH ?
+        Binary_Output_Present_Value_Relinquish(instance, priority) :
+        Binary_Output_Present_Value_Set(instance,
+            command == BACNET_RELAY_COMMAND_ON ? BINARY_ACTIVE : BINARY_INACTIVE,
+            priority);
+    esp_err_t result = updated ? relay_effective_value_apply(instance,
+        Binary_Output_Present_Value(instance)) : ESP_ERR_INVALID_ARG;
+    if (status) {
+        status->active = Binary_Output_Present_Value(instance) == BINARY_ACTIVE;
+        status->active_priority = Binary_Output_Present_Value_Priority(instance);
+    }
+    xSemaphoreGive(s_object_mutex);
+    return result;
+}
+
+bool bacnet_app_relay_priorities(unsigned priorities[FW_RELAY_COUNT])
+{
+    if (!priorities || !s_object_mutex ||
+        xSemaphoreTake(s_object_mutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+        return false;
+    }
+    for (unsigned i = 0; i < FW_RELAY_COUNT; ++i) {
+        priorities[i] = Binary_Output_Present_Value_Priority(i + 1U);
+    }
+    xSemaphoreGive(s_object_mutex);
+    return true;
 }

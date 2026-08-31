@@ -227,6 +227,11 @@ def build_parser() -> argparse.ArgumentParser:
     config_set = commands.add_parser("config-set", help="save a partial or full JSON configuration")
     config_set.add_argument("--file", type=Path, required=True, help="JSON configuration file")
 
+    relay = commands.add_parser("relay-set", help="command one BACnet Binary Output")
+    relay.add_argument("--channel", type=int, choices=range(1, 9), required=True)
+    relay.add_argument("--state", choices=("on", "off", "relinquish"), required=True)
+    relay.add_argument("--priority", type=int, default=8, help="BACnet priority 1-16 except 6")
+
     ota = commands.add_parser("ota", help="upload an app-only firmware image over Ethernet")
     ota.add_argument("--file", type=Path, required=True, help="firmware-ota.bin")
     ota.add_argument("--yes", action="store_true", help="confirm firmware activation and reboot")
@@ -264,6 +269,30 @@ def main(argv: list[str] | None = None) -> int:
                 key,
                 "PUT",
                 "/api/v1/config",
+                body,
+                content_type="application/json",
+                timeout=args.timeout,
+            )
+        )
+        return 0
+    if args.command == "relay-set":
+        if args.priority < 1 or args.priority > 16 or args.priority == 6:
+            raise AdminError("relay priority must be 1-16 except reserved priority 6")
+        body = json.dumps(
+            {
+                "channel": args.channel,
+                "priority": args.priority,
+                "state": args.state,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        print_json(
+            authenticated_request(
+                base_url,
+                key,
+                "PUT",
+                "/api/v1/relay",
                 body,
                 content_type="application/json",
                 timeout=args.timeout,
