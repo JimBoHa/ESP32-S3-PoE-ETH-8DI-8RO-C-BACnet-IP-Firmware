@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Static integrity tests for the embedded management interface."""
 
+from __future__ import annotations
+
 from html.parser import HTMLParser
 from pathlib import Path
 import re
