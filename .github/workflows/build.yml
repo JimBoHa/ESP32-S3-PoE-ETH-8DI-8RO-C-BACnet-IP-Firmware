@@ -35,7 +35,10 @@ jobs:
       - name: Run host tests
         run: tests/run_host_tests.sh
       - name: Package flash and OTA images
-        run: python tools/package_release.py
+        shell: bash
+        run: |
+          source /opt/esp/idf/export.sh
+          python tools/package_release.py
       - uses: actions/upload-artifact@v4
         with:
           name: esp32-s3-bacnet-firmware
