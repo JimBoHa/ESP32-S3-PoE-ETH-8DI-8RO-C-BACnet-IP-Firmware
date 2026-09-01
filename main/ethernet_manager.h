@@ -14,4 +14,5 @@ bool ethernet_manager_link_up(void);
 bool ethernet_manager_has_ip(void);
 uint32_t ethernet_manager_network_revision(void);
 bool ethernet_manager_get_ip_info(esp_netif_ip_info_t *info);
+bool ethernet_manager_get_dns_info(esp_netif_dns_info_t *info);
 void ethernet_manager_mac_get(uint8_t mac[6]);

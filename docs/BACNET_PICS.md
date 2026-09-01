@@ -35,6 +35,34 @@ The firmware also sends I-Am after BACnet/IP starts. It does not implement
 DeviceCommunicationControl, ReinitializeDevice, WritePropertyMultiple, time
 synchronization, alarm/event services, file transfer, or private transfer.
 
+## Discovery and configured metadata
+
+The standard I-Am payload does not contain a device name or point names. It
+contains only the Device object identifier, maximum accepted APDU length,
+segmentation support, and vendor identifier. After I-Am, a BACnet browser can
+read the following standard properties to complete discovery:
+
+| Configuration | BACnet representation |
+|---|---|
+| Device instance | I-Am identifier and Device Object_Identifier |
+| Device name | Device Object_Name |
+| Vendor name and ID | Device Vendor_Name and Vendor_Identifier |
+| Location | Device Location |
+| Firmware/model/serial | Device identity properties |
+| Database revision | Device Database_Revision |
+| DI and RO names | BI/BO Object_Name; objects enumerated through Object_List |
+| DI electrical inversion | BI Polarity and Description |
+| DHCP, active IP, subnet, gateway, DNS, UDP port | Network Port 1 |
+| Ethernet hostname | CharacterString Value 1 |
+| Relay-state restore policy | Binary Value 1 |
+
+ReadProperty and ReadPropertyMultiple support this object scan. Who-Has also
+accepts an object name and produces I-Have. A discovery tool that displays only
+the initial I-Am fields must perform the property scan before names appear.
+Inactive fallback static-address fields are management configuration rather
+than active network state and are not duplicated into BACnet while DHCP is in
+use.
+
 ## Objects
 
 ### Device, configured instance
@@ -51,7 +79,10 @@ Configure an owner-assigned ASHRAE vendor identity before product distribution.
 ### Binary Input 1-8
 
 Physical DI1-DI8. Present_Value changes after a 60 ms nominal debounce period.
-Reliability is `NO_FAULT_DETECTED`. These objects are read-only and support COV.
+Object_Name is the persistent configured input name. Polarity reports
+`REVERSE` for a configured active-low channel and `NORMAL` for active-high.
+Description also states the configured electrical polarity. Reliability is
+`NO_FAULT_DETECTED`. These objects are read-only and support COV.
 
 ### Binary Output 1-8
 
@@ -93,8 +124,19 @@ All are read-only and support COV.
 ### Network Port 1
 
 Read-only BACnet/IPv4 port information: UDP port, DHCP flag, IP address,
-gateway, prefix, BACnet/IP MAC, APDU length, mode, link speed, quality,
-reliability, and Out_Of_Service state.
+gateway, prefix, active DNS server, BACnet/IP MAC, APDU length, mode, link
+speed, quality, reliability, and Out_Of_Service state.
+
+### Binary Value 1
+
+`Configuration Relay State Restore` is a read-only representation of the
+persistent power-up policy. Present_Value is Active/`Enabled` only when relay
+state restoration is configured; default is Inactive/`Disabled`.
+
+### CharacterString Value 1
+
+`Configuration Hostname` is read-only and contains the persistent Ethernet
+hostname applied at boot.
 
 ## Persistence
 
