@@ -226,6 +226,16 @@ bool ethernet_manager_get_ip_info(esp_netif_ip_info_t *info)
     return valid;
 }
 
+bool ethernet_manager_get_dns_info(esp_netif_dns_info_t *info)
+{
+    if (!info || !s_netif) {
+        return false;
+    }
+    memset(info, 0, sizeof(*info));
+    return esp_netif_get_dns_info(s_netif, ESP_NETIF_DNS_MAIN, info) == ESP_OK &&
+        info->ip.type == ESP_IPADDR_TYPE_V4;
+}
+
 void ethernet_manager_mac_get(uint8_t mac[6])
 {
     if (mac) {

@@ -65,6 +65,14 @@ int main(void)
     assert(!config_model_validate(&invalid, reason, sizeof(reason)));
 
     invalid = config;
+    strcpy(invalid.input_names[0], FW_CONFIG_CSV_HOSTNAME_NAME);
+    assert(!config_model_validate(&invalid, reason, sizeof(reason)));
+
+    invalid = config;
+    strcpy(invalid.relay_names[0], FW_CONFIG_BV_RELAY_RESTORE_NAME);
+    assert(!config_model_validate(&invalid, reason, sizeof(reason)));
+
+    invalid = config;
     strcpy(invalid.location, "bad\nlocation");
     assert(!config_model_validate(&invalid, reason, sizeof(reason)));
 
