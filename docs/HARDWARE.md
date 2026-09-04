@@ -69,5 +69,5 @@ on that channel.
 - Do not use this firmware as a life-safety, emergency-stop, or sole protective
   control.
 
-Pin mapping is compile-time in version 0.10.0. Do not flash a different Waveshare
-8DI/8RO/8DO variant merely because its enclosure looks similar.
+Pin mapping is compile-time. Do not flash a different Waveshare 8DI/8RO/8DO
+variant merely because its enclosure looks similar.
