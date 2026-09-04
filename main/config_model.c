@@ -130,6 +130,8 @@ static bool object_names_are_unique(const firmware_config_t *config)
         FW_STATUS_AI_MIN_HEAP_NAME,
         FW_STATUS_AI_REBOOTS_NAME,
         FW_NETWORK_PORT_NAME,
+        FW_CONFIG_CSV_HOSTNAME_NAME,
+        FW_CONFIG_BV_RELAY_RESTORE_NAME,
     };
     const char *names[1U + FW_DI_COUNT + FW_RELAY_COUNT +
         sizeof(fixed_names) / sizeof(fixed_names[0])];
