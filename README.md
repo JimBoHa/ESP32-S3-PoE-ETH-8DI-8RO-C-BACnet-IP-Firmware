@@ -51,11 +51,21 @@ expander. Verify the exact product label and board revision before flashing.
 | Analog Input | 1002 | Current free heap, bytes | None |
 | Analog Input | 1003 | Minimum free heap, bytes | None |
 | Analog Input | 1004 | Persistent reboot count | None |
+| Binary Value | 1 | Relay-state restore policy | None |
+| CharacterString Value | 1 | Persistent Ethernet hostname | None |
 | Network Port | 1 | BACnet/IPv4 Ethernet port | None |
 
 Relay Present_Value is the **commanded** state. This hardware has no relay
 contact-feedback input, so it cannot prove that a contact moved or a load
 energized. See [BACnet implementation details](docs/BACNET_PICS.md).
+
+BACnet's standard I-Am response contains the Device identifier, APDU and
+segmentation capabilities, and vendor identifier; it has no field for an
+Object_Name. A BACnet browser obtains the configured device, DI, and RO names
+by reading the Device Object_Name and Object_List, then each object's
+Object_Name and Description. Who-Has/I-Have lookup by object name is also
+supported. The input Polarity properties and read-only configuration objects
+make the remaining operational configuration visible during that object scan.
 
 ## Build
 

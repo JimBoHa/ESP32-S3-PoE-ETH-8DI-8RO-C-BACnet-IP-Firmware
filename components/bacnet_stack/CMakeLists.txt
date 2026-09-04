@@ -7,6 +7,8 @@ set(BACNET_SOURCES
     "${BACNET_SRC}/bacnet/basic/object/ai.c"
     "${BACNET_SRC}/bacnet/basic/object/bi.c"
     "${BACNET_SRC}/bacnet/basic/object/bo.c"
+    "${BACNET_SRC}/bacnet/basic/object/bv.c"
+    "${BACNET_SRC}/bacnet/basic/object/csv.c"
     "${BACNET_SRC}/bacnet/basic/object/netport.c"
     "${BACNET_SRC}/bacnet/basic/npdu/h_npdu.c"
     "${BACNET_SRC}/bacnet/basic/sys/datetime_mstimer.c"
@@ -76,6 +78,9 @@ target_compile_definitions(${COMPONENT_LIB} PUBLIC
     CONFIG_BACNET_BASIC_OBJECT_ANALOG_INPUT=1
     CONFIG_BACNET_BASIC_OBJECT_BINARY_INPUT=1
     CONFIG_BACNET_BASIC_OBJECT_BINARY_OUTPUT=1
+    CONFIG_BACNET_BASIC_OBJECT_BINARY_VALUE=1
+    CONFIG_BACNET_BASIC_OBJECT_CHARACTER_STRING_VALUE=1
+    BACNET_NETWORK_PORT_IP_DHCP_ENABLED=1
     CONFIG_BACNET_BASIC_COV_SUBSCRIPTIONS_SIZE=16
     MAX_COV_SUBSCRIPTIONS=16
     MAX_COV_ADDRESSES=8

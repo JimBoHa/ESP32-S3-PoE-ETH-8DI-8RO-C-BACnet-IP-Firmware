@@ -23,6 +23,8 @@
 #define FW_STATUS_AI_MIN_HEAP_NAME "Status Minimum Heap Bytes"
 #define FW_STATUS_AI_REBOOTS_NAME "Status Reboot Count"
 #define FW_NETWORK_PORT_NAME "BACnet/IP Ethernet Port"
+#define FW_CONFIG_CSV_HOSTNAME_NAME "Configuration Hostname"
+#define FW_CONFIG_BV_RELAY_RESTORE_NAME "Configuration Relay State Restore"
 
 #define FW_HTTP_PORT 80U
 #define FW_AUTH_KEY_BYTES 32U

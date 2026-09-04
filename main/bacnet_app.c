@@ -16,11 +16,14 @@
 #include "esp_timer.h"
 
 #include "bacnet/apdu.h"
+#include "bacnet/bacstr.h"
 #include "bacnet/basic/binding/address.h"
 #include "bacnet/basic/npdu/h_npdu.h"
 #include "bacnet/basic/object/ai.h"
 #include "bacnet/basic/object/bi.h"
 #include "bacnet/basic/object/bo.h"
+#include "bacnet/basic/object/bv.h"
+#include "bacnet/basic/object/csv.h"
 #include "bacnet/basic/object/device.h"
 #include "bacnet/basic/object/netport.h"
 #include "bacnet/basic/service/h_apdu.h"
@@ -33,6 +36,7 @@
 #include "bacnet/basic/service/h_wp.h"
 #include "bacnet/basic/service/s_iam.h"
 #include "bacnet/basic/tsm/tsm.h"
+#include "bacnet/cov.h"
 #include "bacnet/datalink/bip.h"
 #include "bacnet/npdu.h"
 
@@ -50,6 +54,8 @@
 #define STATUS_AI_FREE_HEAP_BYTES 1002U
 #define STATUS_AI_MIN_HEAP_BYTES 1003U
 #define STATUS_AI_REBOOT_COUNT 1004U
+#define CONFIG_CSV_HOSTNAME 1U
+#define CONFIG_BV_RELAY_RESTORE 1U
 
 static const char *TAG = "bacnet";
 static firmware_config_t s_config;
@@ -59,6 +65,35 @@ static uint8_t s_pdu_buffer[BIP_MPDU_MAX];
 static SemaphoreHandle_t s_start_signal;
 static SemaphoreHandle_t s_object_mutex;
 static esp_err_t s_start_result;
+
+static bool read_only_write_property(BACNET_WRITE_PROPERTY_DATA *data)
+{
+    if (data) {
+        data->error_class = ERROR_CLASS_PROPERTY;
+        data->error_code = ERROR_CODE_WRITE_ACCESS_DENIED;
+    }
+    return false;
+}
+
+static void read_only_writable_property_list(
+    uint32_t object_instance, const int32_t **properties)
+{
+    static const int32_t writable_properties[] = {-1};
+    (void)object_instance;
+    if (properties) {
+        *properties = writable_properties;
+    }
+}
+
+static bool binary_input_encode_value_list(
+    uint32_t object_instance, BACNET_PROPERTY_VALUE *value_list)
+{
+    bool fault = Binary_Input_Reliability(object_instance) !=
+        RELIABILITY_NO_FAULT_DETECTED;
+    return cov_value_list_encode_enumerated(value_list,
+        Binary_Input_Present_Value(object_instance), false, fault, false,
+        Binary_Input_Out_Of_Service(object_instance));
+}
 
 static bool binary_output_write_property(BACNET_WRITE_PROPERTY_DATA *data)
 {
@@ -92,10 +127,10 @@ static object_functions_t s_object_table[] = {
     {OBJECT_BINARY_INPUT, Binary_Input_Init, Binary_Input_Count,
         Binary_Input_Index_To_Instance, Binary_Input_Valid_Instance,
         Binary_Input_Object_Name, Binary_Input_Read_Property, NULL,
-        Binary_Input_Property_Lists, NULL, NULL, Binary_Input_Encode_Value_List,
+        Binary_Input_Property_Lists, NULL, NULL, binary_input_encode_value_list,
         Binary_Input_Change_Of_Value, Binary_Input_Change_Of_Value_Clear,
         NULL, NULL, NULL, Binary_Input_Create, Binary_Input_Delete, NULL,
-        Binary_Input_Writable_Property_List},
+        read_only_writable_property_list},
     {OBJECT_ANALOG_INPUT, Analog_Input_Init, Analog_Input_Count,
         Analog_Input_Index_To_Instance, Analog_Input_Valid_Instance,
         Analog_Input_Object_Name, Analog_Input_Read_Property,
@@ -112,6 +147,22 @@ static object_functions_t s_object_table[] = {
         Binary_Output_Change_Of_Value_Clear, NULL, NULL, NULL,
         Binary_Output_Create, Binary_Output_Delete, NULL,
         binary_output_writable_property_list},
+    {OBJECT_BINARY_VALUE, Binary_Value_Init, Binary_Value_Count,
+        Binary_Value_Index_To_Instance, Binary_Value_Valid_Instance,
+        Binary_Value_Object_Name, Binary_Value_Read_Property,
+        read_only_write_property, Binary_Value_Property_Lists, NULL, NULL,
+        Binary_Value_Encode_Value_List, Binary_Value_Change_Of_Value,
+        Binary_Value_Change_Of_Value_Clear, NULL, NULL, NULL, NULL, NULL, NULL,
+        read_only_writable_property_list},
+    {OBJECT_CHARACTERSTRING_VALUE, CharacterString_Value_Init,
+        CharacterString_Value_Count, CharacterString_Value_Index_To_Instance,
+        CharacterString_Value_Valid_Instance, CharacterString_Value_Object_Name,
+        CharacterString_Value_Read_Property, read_only_write_property,
+        CharacterString_Value_Property_Lists, NULL, NULL,
+        CharacterString_Value_Encode_Value_List,
+        CharacterString_Value_Change_Of_Value,
+        CharacterString_Value_Change_Of_Value_Clear, NULL, NULL, NULL, NULL,
+        NULL, NULL, read_only_writable_property_list},
     {OBJECT_NETWORK_PORT, Network_Port_Init, Network_Port_Count,
         Network_Port_Index_To_Instance, Network_Port_Valid_Instance,
         Network_Port_Object_Name, Network_Port_Read_Property, NULL,
@@ -190,6 +241,37 @@ static void create_analog_input(uint32_t instance, const char *name,
     (void)Analog_Input_Reliability_Set(instance, RELIABILITY_NO_FAULT_DETECTED);
 }
 
+static bool create_configuration_objects(void)
+{
+    BACNET_CHARACTER_STRING hostname;
+    bool valid = CharacterString_Value_Create(CONFIG_CSV_HOSTNAME) ==
+        CONFIG_CSV_HOSTNAME;
+    valid = CharacterString_Value_Name_Set(CONFIG_CSV_HOSTNAME,
+        FW_CONFIG_CSV_HOSTNAME_NAME) && valid;
+    valid = CharacterString_Value_Description_Set(CONFIG_CSV_HOSTNAME,
+        "Persistent Ethernet hostname; changes require reboot") && valid;
+    valid = characterstring_init_ansi(&hostname, s_config.hostname) && valid;
+    valid = CharacterString_Value_Present_Value_Set(CONFIG_CSV_HOSTNAME,
+        &hostname) && valid;
+
+    valid = Binary_Value_Create(CONFIG_BV_RELAY_RESTORE) ==
+        CONFIG_BV_RELAY_RESTORE && valid;
+    valid = Binary_Value_Name_Set(CONFIG_BV_RELAY_RESTORE,
+        FW_CONFIG_BV_RELAY_RESTORE_NAME) && valid;
+    valid = Binary_Value_Description_Set(CONFIG_BV_RELAY_RESTORE,
+        "Persistent relay-state restoration policy used at power-up") && valid;
+    valid = Binary_Value_Inactive_Text_Set(CONFIG_BV_RELAY_RESTORE,
+        "Disabled") && valid;
+    valid = Binary_Value_Active_Text_Set(CONFIG_BV_RELAY_RESTORE,
+        "Enabled") && valid;
+    valid = Binary_Value_Reliability_Set(CONFIG_BV_RELAY_RESTORE,
+        RELIABILITY_NO_FAULT_DETECTED) && valid;
+    valid = Binary_Value_Present_Value_Set(CONFIG_BV_RELAY_RESTORE,
+        s_config.restore_relay_state ? BINARY_ACTIVE : BINARY_INACTIVE) && valid;
+    Binary_Value_Write_Disable(CONFIG_BV_RELAY_RESTORE);
+    return valid;
+}
+
 static bool initialize_objects(void)
 {
     Device_Init(s_object_table);
@@ -215,9 +297,13 @@ static bool initialize_objects(void)
 
     for (uint32_t i = 0; i < FW_DI_COUNT; ++i) {
         char description_text[64];
+        bool inverted = (s_config.input_invert_mask & (1U << i)) != 0;
         snprintf(description_text, sizeof(description_text),
-            "Opto-isolated digital input DI%lu", (unsigned long)(i + 1U));
+            "Opto-isolated digital input DI%lu; configured active-%s",
+            (unsigned long)(i + 1U), inverted ? "low" : "high");
         create_binary_input(i + 1U, s_config.input_names[i], description_text);
+        (void)Binary_Input_Polarity_Set(i + 1U,
+            inverted ? POLARITY_REVERSE : POLARITY_NORMAL);
         (void)Binary_Input_Inactive_Text_Set(i + 1U, "Inactive");
         (void)Binary_Input_Active_Text_Set(i + 1U, "Active");
     }
@@ -262,6 +348,9 @@ static bool initialize_objects(void)
     (void)Network_Port_Out_Of_Service_Set(1, false);
     (void)Network_Port_Quality_Set(1, s_config.dhcp_enabled ?
         PORT_QUALITY_LEARNED : PORT_QUALITY_CONFIGURED);
+    Network_Port_Changes_Activate();
+
+    bool configuration_objects_valid = create_configuration_objects();
 
     create_analog_input(STATUS_AI_UPTIME_SECONDS, FW_STATUS_AI_UPTIME_NAME,
         "Seconds since this firmware booted", UNITS_SECONDS, 60.0F);
@@ -275,7 +364,9 @@ static bool initialize_objects(void)
     return Binary_Input_Count() == FW_DI_COUNT + FW_STATUS_BI_COUNT &&
         Binary_Output_Count() == FW_RELAY_COUNT &&
         Analog_Input_Count() == FW_STATUS_AI_COUNT &&
-        Network_Port_Count() == 1U;
+        Binary_Value_Count() == 1U &&
+        CharacterString_Value_Count() == 1U &&
+        Network_Port_Count() == 1U && configuration_objects_valid;
 }
 
 static void register_service_handlers(void)
@@ -305,13 +396,20 @@ static void update_network_port(const esp_netif_ip_info_t *info)
 {
     const uint8_t *ip = (const uint8_t *)&info->ip.addr;
     const uint8_t *gateway = (const uint8_t *)&info->gw.addr;
+    uint8_t dns[4] = {0};
+    esp_netif_dns_info_t dns_info;
+    if (ethernet_manager_get_dns_info(&dns_info)) {
+        memcpy(dns, &dns_info.ip.u_addr.ip4.addr, sizeof(dns));
+    }
     uint8_t bip_mac[6] = {ip[0], ip[1], ip[2], ip[3],
         (uint8_t)(s_config.bacnet_port >> 8), (uint8_t)s_config.bacnet_port};
     (void)Network_Port_IP_Address_Set(1, ip[0], ip[1], ip[2], ip[3]);
     (void)Network_Port_IP_Gateway_Set(1, gateway[0], gateway[1], gateway[2], gateway[3]);
     (void)Network_Port_IP_Subnet_Prefix_Set(1, netmask_prefix(info->netmask.addr));
+    (void)Network_Port_IP_DNS_Server_Set(1, 0, dns[0], dns[1], dns[2], dns[3]);
     (void)Network_Port_MAC_Address_Set(1, bip_mac, sizeof(bip_mac));
     (void)Network_Port_Reliability_Set(1, RELIABILITY_NO_FAULT_DETECTED);
+    Network_Port_Changes_Activate();
 }
 
 static void update_binary_objects(void)
