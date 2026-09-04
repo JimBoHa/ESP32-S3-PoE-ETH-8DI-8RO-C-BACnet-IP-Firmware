@@ -25,6 +25,9 @@ static BACNET_IP_ADDRESS s_broadcast;
 static BACNET_IP_ADDRESS s_gateway;
 static uint8_t s_prefix;
 static bool s_debug;
+/* The BACnet task consumes each NPDU synchronously, so this records the BVLC
+   origin type for the service handler invoked by that same receive call. */
+static bool s_last_receive_was_broadcast;
 static char s_interface[16] = "eth0";
 
 static uint8_t contiguous_prefix(uint32_t network_mask)
@@ -210,9 +213,14 @@ uint16_t bip_receive(BACNET_ADDRESS *src, uint8_t *pdu, uint16_t max_pdu, unsign
     BACNET_IP_ADDRESS source = {.port = ntohs(remote.sin_port)};
     memcpy(source.address, &remote.sin_addr.s_addr, 4);
     uint16_t offset;
-    if (function == BVLC_ORIGINAL_UNICAST_NPDU || function == BVLC_ORIGINAL_BROADCAST_NPDU) {
+    if (function == BVLC_ORIGINAL_UNICAST_NPDU) {
+        s_last_receive_was_broadcast = false;
+        offset = 4;
+    } else if (function == BVLC_ORIGINAL_BROADCAST_NPDU) {
+        s_last_receive_was_broadcast = true;
         offset = 4;
     } else if (function == BVLC_FORWARDED_NPDU && received >= 10) {
+        s_last_receive_was_broadcast = true;
         memcpy(source.address, &pdu[4], 4);
         decode_unsigned16(&pdu[8], &source.port);
         offset = 10;
@@ -233,6 +241,11 @@ uint16_t bip_receive(BACNET_ADDRESS *src, uint8_t *pdu, uint16_t max_pdu, unsign
     encode_unsigned16(&src->mac[4], source.port);
     memmove(pdu, &pdu[offset], npdu_len);
     return npdu_len;
+}
+
+bool bip_esp32_last_receive_was_broadcast(void)
+{
+    return s_last_receive_was_broadcast;
 }
 
 void bip_set_port(uint16_t port)

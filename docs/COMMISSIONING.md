@@ -1,8 +1,9 @@
 # Commissioning and recovery
 
-Version 0.10.0 has completed initial target-board bring-up but not the full
-hardware test checklist. Use a bench unit, disconnect relay loads, and preserve
-a way to restore the manufacturer's image if that matters to the site.
+Version 0.11.0 builds on the initial 0.10.0 target-board bring-up but has not
+completed the full hardware test checklist. Use a bench unit, disconnect relay
+loads, and preserve a way to restore the manufacturer's image if that matters
+to the site.
 
 ## 1. Verify the target
 
