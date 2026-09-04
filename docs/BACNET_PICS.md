@@ -1,6 +1,6 @@
 # BACnet implementation summary
 
-This is an engineering PICS-style summary for firmware 0.10.0. It is not a BTL
+This is an engineering PICS-style summary for firmware 0.11.0. It is not a BTL
 test report, listing, or certification claim.
 
 ## Device and data link
@@ -34,6 +34,12 @@ Device.
 The firmware also sends I-Am after BACnet/IP starts. It does not implement
 DeviceCommunicationControl, ReinitializeDevice, WritePropertyMultiple, time
 synchronization, alarm/event services, file transfer, or private transfer.
+
+Broadcast Who-Is requests receive a broadcast I-Am. Unicast Who-Is requests
+receive a unicast I-Am directed back to the requesting BACnet/IP address. A
+Forwarded-NPDU is treated as broadcast traffic. This supports both ordinary
+same-subnet discovery and directed discovery through networks that suppress
+broadcast replies.
 
 ## Discovery and configured metadata
 
