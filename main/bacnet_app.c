@@ -369,10 +369,21 @@ static bool initialize_objects(void)
         Network_Port_Count() == 1U && configuration_objects_valid;
 }
 
+static void handler_who_is_compatible(
+    uint8_t *service_request, uint16_t service_len, BACNET_ADDRESS *source)
+{
+    if (bip_esp32_last_receive_was_broadcast()) {
+        handler_who_is(service_request, service_len, source);
+    } else {
+        handler_who_is_unicast(service_request, service_len, source);
+    }
+}
+
 static void register_service_handlers(void)
 {
     apdu_set_unrecognized_service_handler_handler(handler_unrecognized_service);
-    apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_WHO_IS, handler_who_is);
+    apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_WHO_IS,
+        handler_who_is_compatible);
     apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_WHO_HAS, handler_who_has);
     apdu_set_confirmed_handler(SERVICE_CONFIRMED_READ_PROPERTY, handler_read_property);
     apdu_set_confirmed_handler(SERVICE_CONFIRMED_READ_PROP_MULTIPLE,
