@@ -289,6 +289,7 @@
           <div class="metric"><span>Uptime</span><strong id="sUptime">—</strong></div>
           <div class="metric"><span>Free / minimum heap</span><strong id="sHeap">—</strong></div>
           <div class="metric"><span>Reboot count</span><strong id="sReboots">—</strong></div>
+          <div class="metric"><span>Last reset</span><strong id="sReset">—</strong></div>
         </article>
         <article class="card">
           <h3>Firmware</h3>
@@ -549,6 +550,7 @@
     $('sUptime').textContent = formatUptime(status.uptime_seconds);
     $('sHeap').textContent = `${Number(status.free_heap_bytes).toLocaleString()} / ${Number(status.minimum_free_heap_bytes).toLocaleString()} B`;
     $('sReboots').textContent = status.reboot_count;
+    $('sReset').textContent = `${status.last_reset_reason || 'unknown'} (${status.last_reset_reason_code ?? '—'})`;
     $('sProduct').textContent = status.product;
     $('sVersion').textContent = status.firmware_version;
     $('sBuild').textContent = status.build_date;

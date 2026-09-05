@@ -10,6 +10,8 @@ import unittest
 
 
 WEB_UI = Path(__file__).parents[1] / "main" / "web" / "index.html"
+WEB_ADMIN = Path(__file__).parents[1] / "main" / "web_admin.c"
+APP_MAIN = Path(__file__).parents[1] / "main" / "app_main.c"
 
 
 class IdCollector(HTMLParser):
@@ -27,6 +29,8 @@ class WebUiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.page = WEB_UI.read_text(encoding="utf-8")
+        cls.web_admin = WEB_ADMIN.read_text(encoding="utf-8")
+        cls.app_main = APP_MAIN.read_text(encoding="utf-8")
 
     def test_page_is_self_contained_and_bounded(self) -> None:
         self.assertLess(len(self.page.encode("utf-8")), 96 * 1024)
@@ -69,6 +73,15 @@ class WebUiTests(unittest.TestCase):
 
     def test_no_browser_storage_for_admin_key(self) -> None:
         self.assertNotRegex(self.page, re.compile(r"\b(?:localStorage|sessionStorage|indexedDB)\b"))
+
+    def test_reset_diagnostics_are_exposed(self) -> None:
+        self.assertIn('id="sReset"', self.page)
+        self.assertIn("status.last_reset_reason", self.page)
+        self.assertIn('"last_reset_reason"', self.web_admin)
+        self.assertIn('"last_reset_reason_code"', self.web_admin)
+        self.assertIn("ESP-IDF reset reason code", self.app_main)
+        for reason in ("power-on", "software", "panic", "task-watchdog", "brownout"):
+            self.assertIn(f'"{reason}"', self.web_admin)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_ota_ops.h"
+#include "esp_system.h"
 #include "mbedtls/platform_util.h"
 #include "nvs_flash.h"
 
@@ -43,6 +44,7 @@ void app_main(void)
 {
     const esp_app_desc_t *app = esp_app_get_description();
     ESP_LOGI(TAG, "%s firmware %s", FW_PRODUCT_NAME, app->version);
+    ESP_LOGI(TAG, "ESP-IDF reset reason code: %d", (int)esp_reset_reason());
     bool pending_verify = running_image_pending_verification();
 
     esp_err_t result = nvs_flash_init();
