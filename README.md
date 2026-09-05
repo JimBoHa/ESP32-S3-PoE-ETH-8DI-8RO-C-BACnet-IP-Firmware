@@ -5,12 +5,14 @@ commands, and device health from the Waveshare
 `ESP32-S3-POE-ETH-8DI-8RO-C` as BACnet/IP objects. It replaces the factory
 application and provides authenticated firmware updates over Ethernet.
 
-> **Hardware bring-up firmware:** version 0.13.0 builds on the target-board
-> checks completed for 0.10.0: safe relay startup, RTC detection, W5500 link,
-> DHCP, ICMP, management HTTP, BACnet property reads, and one-at-a-time Binary
-> Output commands. The full hardware-in-the-loop checklist—especially
-> electrically stimulated inputs and relay contact feedback—is still
-> incomplete. Disconnect controlled loads during first commissioning.
+> **Hardware bring-up firmware:** version 0.13.0 has completed the
+> software-visible target-board acceptance suite: safe relay startup, RTC and
+> W5500 health, DHCP/ICMP/HTTP, BACnet discovery/properties/COV/priorities, all
+> eight one-at-a-time Binary Output commands, persistent configuration, and
+> successful and rejected Ethernet OTA paths. Electrically stimulated inputs,
+> relay contact feedback, destructive recovery tests, proprietary BAS clients,
+> and the endurance run remain incomplete. Disconnect controlled loads during
+> first commissioning.
 
 This source targets only the 16 MB flash / 8 MB PSRAM model built around an
 `ESP32-S3-WROOM-1U-N16R8`, W5500 Ethernet controller, and TCA9554 relay
@@ -214,8 +216,9 @@ ACLs. Read [Security](docs/SECURITY.md) before deployment.
 
 ## Current limitations
 
-- Initial physical target bring-up only; the full hardware checklist is not
-  complete, and the firmware is not BTL tested or listed.
+- Bench protocol and relay-command validation only; the remaining field tests
+  are listed in [Development and release](docs/DEVELOPMENT.md), and the
+  firmware is not BTL tested or listed.
 - Local-subnet BACnet/IP only; no BBMD registration or BACnet/SC.
 - No CAN, TF-card, buzzer, RGB LED, or RTC timekeeping objects yet.
 - IPv4 only; no IPv6.
