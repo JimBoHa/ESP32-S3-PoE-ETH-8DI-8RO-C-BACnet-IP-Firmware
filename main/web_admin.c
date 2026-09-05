@@ -35,6 +35,45 @@
 static const char *TAG = "web_admin";
 static httpd_handle_t s_server;
 
+static const char *reset_reason_name(esp_reset_reason_t reason)
+{
+    switch (reason) {
+        case ESP_RST_POWERON:
+            return "power-on";
+        case ESP_RST_EXT:
+            return "external-pin";
+        case ESP_RST_SW:
+            return "software";
+        case ESP_RST_PANIC:
+            return "panic";
+        case ESP_RST_INT_WDT:
+            return "interrupt-watchdog";
+        case ESP_RST_TASK_WDT:
+            return "task-watchdog";
+        case ESP_RST_WDT:
+            return "watchdog";
+        case ESP_RST_DEEPSLEEP:
+            return "deep-sleep";
+        case ESP_RST_BROWNOUT:
+            return "brownout";
+        case ESP_RST_SDIO:
+            return "sdio";
+        case ESP_RST_USB:
+            return "usb";
+        case ESP_RST_JTAG:
+            return "jtag";
+        case ESP_RST_EFUSE:
+            return "efuse-error";
+        case ESP_RST_PWR_GLITCH:
+            return "power-glitch";
+        case ESP_RST_CPU_LOCKUP:
+            return "cpu-lockup";
+        case ESP_RST_UNKNOWN:
+        default:
+            return "unknown";
+    }
+}
+
 extern const char web_index_start[] asm("_binary_index_html_start");
 extern const char web_index_end[] asm("_binary_index_html_end");
 
@@ -130,6 +169,9 @@ static esp_err_t status_handler(httpd_req_t *request)
     cJSON_AddStringToObject(root, "running_partition", running ? running->label : "unknown");
     cJSON_AddNumberToObject(root, "uptime_seconds", (double)(esp_timer_get_time() / 1000000ULL));
     cJSON_AddNumberToObject(root, "reboot_count", config_store_reboot_count());
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    cJSON_AddStringToObject(root, "last_reset_reason", reset_reason_name(reset_reason));
+    cJSON_AddNumberToObject(root, "last_reset_reason_code", (int)reset_reason);
     cJSON_AddStringToObject(root, "ip_address", ip);
     cJSON_AddBoolToObject(root, "ethernet_link", ethernet_manager_link_up());
     cJSON_AddBoolToObject(root, "ipv4_assigned", has_ip);

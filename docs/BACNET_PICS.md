@@ -1,6 +1,6 @@
 # BACnet implementation summary
 
-This is an engineering PICS-style summary for firmware 0.12.0. It is not a BTL
+This is an engineering PICS-style summary for firmware 0.13.0. It is not a BTL
 test report, listing, or certification claim.
 
 ## Device and data link
@@ -78,6 +78,10 @@ MAC, location, restart information, supported object/service bit strings,
 object list, database revision, and active COV subscriptions are exposed.
 Properties are read-only over BACnet. Persistent identity changes use the
 authenticated management API and take effect after reboot.
+
+The standard Device `Last_Restart_Reason` is the portable BACnet view. The
+management status endpoint also reports ESP-IDF's more specific reset-reason
+name and numeric code for diagnostics and soak-test correlation.
 
 Vendor ID/name default to bacnet-stack's assigned vendor identity, ID 260.
 Configure an owner-assigned ASHRAE vendor identity before product distribution.
