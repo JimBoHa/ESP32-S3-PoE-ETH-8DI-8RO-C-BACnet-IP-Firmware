@@ -83,6 +83,19 @@ class WebUiTests(unittest.TestCase):
         for reason in ("power-on", "software", "panic", "task-watchdog", "brownout"):
             self.assertIn(f'"{reason}"', self.web_admin)
 
+    def test_relay_validation_errors_are_specific(self) -> None:
+        for message in (
+            "channel must be between 1 and %u",
+            "priority must be between 1 and 16",
+            "priority 6 is reserved",
+            "state must be on, off, or relinquish",
+        ):
+            self.assertIn(message, self.web_admin)
+        self.assertNotIn(
+            "state must be on, off, or relinquish; priority 6 is reserved",
+            self.web_admin,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
