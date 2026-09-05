@@ -454,9 +454,28 @@ static esp_err_t relay_put_handler(httpd_req_t *request)
     uint32_t priority = 8;
     cJSON *state = cJSON_GetObjectItemCaseSensitive(json, "state");
     bool valid = json_copy_number(json, "channel", FW_RELAY_COUNT,
-        &channel, reason, sizeof(reason)) && channel >= 1U &&
-        json_copy_number(json, "priority", 16U, &priority, reason, sizeof(reason)) &&
-        priority >= 1U && priority != 6U && cJSON_IsString(state) && state->valuestring;
+        &channel, reason, sizeof(reason));
+    if (valid && channel < 1U) {
+        snprintf(reason, sizeof(reason), "channel must be between 1 and %u",
+            FW_RELAY_COUNT);
+        valid = false;
+    }
+    if (valid) {
+        valid = json_copy_number(json, "priority", 16U,
+            &priority, reason, sizeof(reason));
+    }
+    if (valid && priority < 1U) {
+        snprintf(reason, sizeof(reason), "priority must be between 1 and 16");
+        valid = false;
+    }
+    if (valid && priority == 6U) {
+        snprintf(reason, sizeof(reason), "priority 6 is reserved");
+        valid = false;
+    }
+    if (valid && (!cJSON_IsString(state) || !state->valuestring)) {
+        snprintf(reason, sizeof(reason), "state must be on, off, or relinquish");
+        valid = false;
+    }
     bacnet_relay_command_t command = BACNET_RELAY_COMMAND_OFF;
     const char *requested_state = NULL;
     if (valid && strcmp(state->valuestring, "on") == 0) {
@@ -468,10 +487,9 @@ static esp_err_t relay_put_handler(httpd_req_t *request)
     } else if (valid && strcmp(state->valuestring, "relinquish") == 0) {
         command = BACNET_RELAY_COMMAND_RELINQUISH;
         requested_state = "relinquish";
-    } else {
+    } else if (valid) {
         valid = false;
-        snprintf(reason, sizeof(reason),
-            "state must be on, off, or relinquish; priority 6 is reserved");
+        snprintf(reason, sizeof(reason), "state must be on, off, or relinquish");
     }
     cJSON_Delete(json);
     if (!valid) {
