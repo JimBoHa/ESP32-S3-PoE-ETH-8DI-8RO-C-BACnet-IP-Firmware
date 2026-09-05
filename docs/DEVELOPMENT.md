@@ -47,27 +47,43 @@ Run long-duration health monitoring with the host-side logger described in
 restarts/configuration changes/relay activity/heap-floor violations, and does
 not add periodic writes to ESP32 NVS or flash.
 
-Initial 0.10.0 bench validation on 2026-08-31 read each Binary Input over
-BACnet/IP for at least three seconds and commanded each Binary Output as the
-only active channel for at least three seconds. Every BACnet write was read
-back and cross-checked against the TCA9554 command mask, then turned off and
-relinquished. The DI channels remained inactive because no electrical stimulus
-or loopback fixture was attached; this validates their BACnet read path, not
-their optocoupler polarity or field wiring. The final relay mask and all
-priority arrays were zero.
+Version 0.13.0 bench validation on 2026-09-04 completed two full 93-check HIL
+runs with BACpypes3 0.0.106. The suite covered directed and broadcast
+discovery, the exact 28-object model and metadata, advertised capabilities,
+ReadPropertyMultiple `ALL`, Who-Has by identifier and configured name,
+confirmed and unconfirmed COV, the 16-subscription capacity boundary, negative
+access cases, priority arbitration, reserved priority 6, and final cleanup.
+Each Binary Output was the only active relay for three seconds and was
+cross-checked against the TCA9554 command mask before relinquishing. A second,
+independent upstream bacnet-stack 1.6.0 client also discovered the controller
+and read Device, DI, BO, and Network Port properties.
 
-Tests still required on physical hardware:
+The same validation cycle covered management API/security headers, correct
+HMAC, replay, signature, body-hash, and nonce-expiry behavior; persistent
+Device/DI/BO names and location across reboot followed by exact restoration;
+DHCP address and MAC stability across warm reboots; safe relay clearing when
+rebooting with restore disabled; 2,011 malformed BACnet/IPv4 frames with
+service recovery and bounded heap; successful Ethernet OTA; interrupted,
+invalid-hash, invalid-image, and valid-wrong-project OTA rejection; and
+retention of the validated OTA slot across a subsequent reboot. The tested OTA
+image is 577,744 bytes with SHA-256
+`11f76d17f6731f7f6a709d60e3ce7970dc3ca1523bff92ce1f2c2ad391bb4c73`.
+The final relay mask and all priority arrays were zero.
 
-- cold boot, brownout, watchdog, and rapid power-cycle relay behavior;
-- all DI polarities and debounce timing;
-- every relay mapping under no-load conditions;
-- W5500 link/DHCP/static-IP behavior and MAC stability;
-- Who-Is/I-Am, object reads, RPM, priority-array writes, relinquish, and COV
-  against at least two independent BACnet clients;
-- OTA success, interrupted transfer, invalid hash/image/project, failed
-  startup, and bootloader rollback;
-- NVS persistence and corrupt-blob fallback;
-- endurance/soak, malformed-packet fuzzing, and heap monitoring.
+The DI channels remained inactive because no electrical stimulus or loopback
+fixture was attached. Their BACnet read path and metadata are validated, but
+their optocoupler polarity, debounce timing, and field wiring are not.
+
+Remaining field-only release gates:
+
+- electrically stimulate every DI and measure polarity and debounce timing;
+- verify every relay contact with a meter, independent of command readback;
+- cold boot, cable loss, brownout, watchdog, and rapid power-cycle behavior;
+- live static-IP switchover with local USB recovery available;
+- failed-startup OTA rollback and corrupt-NVS fallback with recovery access;
+- discovery and point import from representative ALC, Niagara/Tridium, and
+  Metasys clients;
+- complete the documented 24-hour endurance/soak run.
 
 ## Package
 

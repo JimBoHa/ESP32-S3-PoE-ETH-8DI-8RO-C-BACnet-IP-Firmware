@@ -1,9 +1,10 @@
 # Commissioning and recovery
 
-Version 0.13.0 builds on the initial 0.10.0 target-board bring-up but has not
-completed the full hardware test checklist. Use a bench unit, disconnect relay
-loads, and preserve a way to restore the manufacturer's image if that matters
-to the site.
+Version 0.13.0 has completed the software-visible target-board acceptance
+suite but not the field electrical, destructive recovery, proprietary-client,
+or endurance checks listed in [Development and release](DEVELOPMENT.md). Use a
+bench unit, disconnect relay loads, and preserve a way to restore the
+manufacturer's image if that matters to the site.
 
 ## 1. Verify the target
 
