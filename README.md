@@ -207,6 +207,7 @@ ACLs. Read [Security](docs/SECURITY.md) before deployment.
 - [Commissioning and recovery](docs/COMMISSIONING.md)
 - [Hardware mapping and electrical cautions](docs/HARDWARE.md)
 - [Hardware acceptance testing](docs/HARDWARE_TESTING.md)
+- [Soak testing and health logs](docs/SOAK_TESTING.md)
 - [BACnet implementation/PICS summary](docs/BACNET_PICS.md)
 - [Security model](docs/SECURITY.md)
 - [Development and release process](docs/DEVELOPMENT.md)
