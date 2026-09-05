@@ -65,6 +65,11 @@ static uint8_t s_pdu_buffer[BIP_MPDU_MAX];
 static SemaphoreHandle_t s_start_signal;
 static SemaphoreHandle_t s_object_mutex;
 static esp_err_t s_start_result;
+/* bacnet-stack object metadata setters retain these pointers for zero-copy
+   reads, so generated strings must live for the lifetime of the application. */
+static char s_serial_number[18];
+static char s_input_descriptions[FW_DI_COUNT][64];
+static char s_output_descriptions[FW_RELAY_COUNT][80];
 
 static bool read_only_write_property(BACNET_WRITE_PROPERTY_DATA *data)
 {
@@ -289,19 +294,19 @@ static bool initialize_objects(void)
     (void)Device_Set_System_Status(STATUS_OPERATIONAL, true);
 
     uint8_t mac[6];
-    char serial[18];
     ethernet_manager_mac_get(mac);
-    snprintf(serial, sizeof(serial), "%02X%02X%02X%02X%02X%02X",
+    snprintf(s_serial_number, sizeof(s_serial_number),
+        "%02X%02X%02X%02X%02X%02X",
         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    (void)Device_Serial_Number_Set(serial, strlen(serial));
+    (void)Device_Serial_Number_Set(s_serial_number, strlen(s_serial_number));
 
     for (uint32_t i = 0; i < FW_DI_COUNT; ++i) {
-        char description_text[64];
         bool inverted = (s_config.input_invert_mask & (1U << i)) != 0;
-        snprintf(description_text, sizeof(description_text),
+        snprintf(s_input_descriptions[i], sizeof(s_input_descriptions[i]),
             "Opto-isolated digital input DI%lu; configured active-%s",
             (unsigned long)(i + 1U), inverted ? "low" : "high");
-        create_binary_input(i + 1U, s_config.input_names[i], description_text);
+        create_binary_input(i + 1U, s_config.input_names[i],
+            s_input_descriptions[i]);
         (void)Binary_Input_Polarity_Set(i + 1U,
             inverted ? POLARITY_REVERSE : POLARITY_NORMAL);
         (void)Binary_Input_Inactive_Text_Set(i + 1U, "Inactive");
@@ -321,11 +326,11 @@ static bool initialize_objects(void)
         uint32_t instance = i + 1U;
         (void)Binary_Output_Create(instance);
         (void)Binary_Output_Name_Set(instance, s_config.relay_names[i]);
-        char output_description[80];
-        snprintf(output_description, sizeof(output_description),
+        snprintf(s_output_descriptions[i], sizeof(s_output_descriptions[i]),
             "Relay RO%lu command; state is commanded, not contact feedback",
             (unsigned long)instance);
-        (void)Binary_Output_Description_Set(instance, output_description);
+        (void)Binary_Output_Description_Set(instance,
+            s_output_descriptions[i]);
         (void)Binary_Output_Inactive_Text_Set(instance, "Off");
         (void)Binary_Output_Active_Text_Set(instance, "On");
         BACNET_BINARY_PV relinquish = board_io_relay_get(i) ? BINARY_ACTIVE : BINARY_INACTIVE;
