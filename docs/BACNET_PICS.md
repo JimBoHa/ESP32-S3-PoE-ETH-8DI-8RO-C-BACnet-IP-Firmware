@@ -1,6 +1,6 @@
 # BACnet implementation summary
 
-This is an engineering PICS-style summary for firmware 0.13.0. It is not a BTL
+This is an engineering PICS-style summary for firmware 0.13.2. It is not a BTL
 test report, listing, or certification claim.
 
 ## Device and data link
@@ -17,6 +17,7 @@ test report, listing, or certification claim.
 | BACnet/SC | Not implemented |
 | Character set | ANSI X3.4 strings emitted by the stack |
 | COV subscriptions | Up to 16 subscriptions / 8 addresses |
+| UDP receive mailbox | 32 datagrams |
 
 Broadcast discovery works on the local IP subnet. Cross-subnet discovery needs
 an external BACnet router/BBMD design; the device does not register as a Foreign

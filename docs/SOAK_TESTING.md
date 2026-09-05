@@ -28,7 +28,7 @@ python tools/soak_monitor.py \
   --duration 86400 \
   --interval 60 \
   --timeout 5 \
-  --minimum-heap-bytes 200000 \
+  --minimum-heap-bytes 250000 \
   --expected-relay-mask 0 \
   --summary-every 15 \
   --output ../bacnet-io-soak-24h.jsonl
@@ -40,6 +40,12 @@ taken at the start and at the exact duration boundary, as well as at every
 interval between them. The process returns zero only if the full duration
 finishes with no request failures and no health alerts. An interrupted run
 writes a summary and returns 130.
+
+For a release gate, require all 1,441 scheduled samples, zero request failures,
+zero health alerts, no unexpected restart or relay activity, and a final
+summary with `"success":true`. Choose a heap threshold only after measuring the
+release's normal baseline; 250,000 bytes provides a modest margin below the
+observed v0.13.2 bench floor.
 
 Inspect progress from another terminal without changing the log:
 
