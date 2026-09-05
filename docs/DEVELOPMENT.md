@@ -37,6 +37,11 @@ and static integrity of the embedded management interface. The IDF build
 compiles the real ESP32-S3 application, embedded page, and selected
 bacnet-stack sources.
 
+The repeatable live BACnet suite and its explicit relay safety gate are
+documented in [Hardware acceptance testing](HARDWARE_TESTING.md). Its JSON
+report should be retained with release test evidence; do not commit site
+addresses, commissioning keys, or unrelated BAS inventory.
+
 Initial 0.10.0 bench validation on 2026-08-31 read each Binary Input over
 BACnet/IP for at least three seconds and commanded each Binary Output as the
 only active channel for at least three seconds. Every BACnet write was read
