@@ -47,7 +47,7 @@ Run long-duration health monitoring with the host-side logger described in
 restarts/configuration changes/relay activity/heap-floor violations, and does
 not add periodic writes to ESP32 NVS or flash.
 
-Version 0.13.0 bench validation on 2026-09-04 completed two full 93-check HIL
+Version 0.13.2 bench validation on 2026-09-05 completed two full 93-check HIL
 runs with BACpypes3 0.0.106. The suite covered directed and broadcast
 discovery, the exact 28-object model and metadata, advertised capabilities,
 ReadPropertyMultiple `ALL`, Who-Has by identifier and configured name,
@@ -56,19 +56,34 @@ access cases, priority arbitration, reserved priority 6, and final cleanup.
 Each Binary Output was the only active relay for three seconds and was
 cross-checked against the TCA9554 command mask before relinquishing. A second,
 independent upstream bacnet-stack 1.6.0 client also discovered the controller
-and read Device, DI, BO, and Network Port properties.
+and read Device, DI, BO, and Network Port properties. Ten bursts of 32
+simultaneous directed Who-Is requests returned 320 of 320 I-Am responses after
+the BACnet UDP receive mailbox was increased from 6 to 32 datagrams.
 
-The same validation cycle covered management API/security headers, correct
+The same final-candidate validation cycle covered management API/security
+headers, precise input-validation errors, correct
 HMAC, replay, signature, body-hash, and nonce-expiry behavior; persistent
 Device/DI/BO names and location across reboot followed by exact restoration;
-DHCP address and MAC stability across warm reboots; safe relay clearing when
-rebooting with restore disabled; 2,011 malformed BACnet/IPv4 frames with
-service recovery and bounded heap; successful Ethernet OTA; interrupted,
-invalid-hash, invalid-image, and valid-wrong-project OTA rejection; and
-retention of the validated OTA slot across a subsequent reboot. The tested OTA
-image is 577,744 bytes with SHA-256
-`11f76d17f6731f7f6a709d60e3ce7970dc3ca1523bff92ce1f2c2ad391bb4c73`.
+DHCP address and MAC stability across repeated warm reboots; 100 ICMP replies
+with no host-interface errors, drops, or collisions; safe relay clearing when
+rebooting with restore disabled; and 2,011 malformed BACnet/IPv4 frames
+followed by 100 successful BACnet probes with bounded heap. Ethernet OTA was
+validated both by a successful upgrade and by rejection of an interrupted
+transfer, a signed incorrect digest, a structurally invalid image, and a
+checksum/hash-valid image with the wrong project identity. A subsequent reboot
+proved that none of the rejected images changed the next boot partition. The
+tested OTA image is 577,840 bytes with SHA-256
+`fab8d1b3308829c60cadfc3b60242d8d5bd76cdb411104d00a9106780631f973`.
 The final relay mask and all priority arrays were zero.
+
+An earlier v0.13.0 diagnostic soak completed 806 good samples in approximately
+13.45 hours and observed one directed I-Am timeout while another BACnet client
+was generating an unusually high request rate. The controller did not restart
+or lose HTTP service and immediately passed 300 BACnet and 100 ICMP recovery
+probes. That evidence led to the receive-mailbox correction above. The
+diagnostic run was intentionally stopped after the correction was identified;
+it is not a passing endurance result. A fresh strict v0.13.2 soak remains a
+release gate.
 
 The DI channels remained inactive because no electrical stimulus or loopback
 fixture was attached. Their BACnet read path and metadata are validated, but
@@ -83,7 +98,7 @@ Remaining field-only release gates:
 - failed-startup OTA rollback and corrupt-NVS fallback with recovery access;
 - discovery and point import from representative ALC, Niagara/Tridium, and
   Metasys clients;
-- complete the documented 24-hour endurance/soak run.
+- complete the documented strict 24-hour v0.13.2 endurance/soak run.
 
 ## Package
 
