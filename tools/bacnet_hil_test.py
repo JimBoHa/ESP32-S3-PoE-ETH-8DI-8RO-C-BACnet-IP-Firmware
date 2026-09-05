@@ -412,6 +412,7 @@ class HilRunner:
             "database-revision",
             "location",
             "serial-number",
+            "last-restart-reason",
         )
         metadata = {
             prop: await self.read(device, prop) for prop in metadata_properties
@@ -436,7 +437,8 @@ class HilRunner:
             strings_ok
             and str(metadata["object-identifier"]) == device
             and bool(re.fullmatch(r"[0-9A-F]{12}", serial)),
-            f"name={self.device_name!r}, firmware={metadata['firmware-revision']}, serial={serial}",
+            f"name={self.device_name!r}, firmware={metadata['firmware-revision']}, "
+            f"serial={serial}, restart={metadata['last-restart-reason']}",
             "one or more Device identity fields are missing or malformed",
         )
         self.report.require(
@@ -526,6 +528,78 @@ class HilRunner:
                 f"Object_Name={name!r}",
                 "Object_Name is empty",
             )
+
+        for instance in range(1001, 1005):
+            obj = f"binary-input,{instance}"
+            present = str(await self.read(obj, "present-value"))
+            reliability = str(await self.read(obj, "reliability"))
+            out_of_service = bool(await self.read(obj, "out-of-service"))
+            self.report.require(
+                f"{obj} healthy",
+                present == "active"
+                and reliability == "no-fault-detected"
+                and not out_of_service,
+                "active, reliable, and in service",
+                f"Present_Value={present}, reliability={reliability}, "
+                f"out_of_service={out_of_service}",
+            )
+
+        analog_values = {
+            instance: float(
+                await self.read(f"analog-input,{instance}", "present-value")
+            )
+            for instance in range(1001, 1005)
+        }
+        self.report.require(
+            "Runtime health values",
+            analog_values[1001] >= 0
+            and analog_values[1002] >= analog_values[1003] > 0
+            and analog_values[1004] >= 1,
+            f"uptime={analog_values[1001]:.0f}s, heap={analog_values[1002]:.0f}, "
+            f"minimum_heap={analog_values[1003]:.0f}, reboots={analog_values[1004]:.0f}",
+            f"unexpected analog status values: {analog_values}",
+        )
+        hostname = str(await self.read("characterstring-value,1", "present-value"))
+        restore_policy = str(await self.read("binary-value,1", "present-value"))
+        self.report.require(
+            "BACnet configuration status",
+            bool(hostname.strip()) and restore_policy in {"inactive", "active"},
+            f"hostname={hostname!r}, relay restore={restore_policy}",
+            "hostname or relay restore policy is invalid",
+        )
+
+        port_properties = {
+            prop: await self.read("network-port,1", prop)
+            for prop in (
+                "network-type",
+                "protocol-level",
+                "bacnet-ip-mode",
+                "ip-address",
+                "bacnet-ip-udp-port",
+                "ip-subnet-mask",
+                "link-speed",
+                "reliability",
+                "out-of-service",
+            )
+        }
+        local_interface = ipaddress.ip_interface(self.args.local_address)
+        target_address = ipaddress.ip_address(self.args.device_address)
+        self.report.require(
+            "Network Port active configuration",
+            str(port_properties["network-type"]) == "ipv4"
+            and str(port_properties["protocol-level"]) == "bacnet-application"
+            and str(port_properties["bacnet-ip-mode"]) == "normal"
+            and bytes(port_properties["ip-address"]) == target_address.packed
+            and int(port_properties["bacnet-ip-udp-port"]) == BACNET_PORT
+            and bytes(port_properties["ip-subnet-mask"])
+            == local_interface.network.netmask.packed
+            and float(port_properties["link-speed"]) > 0
+            and str(port_properties["reliability"]) == "no-fault-detected"
+            and not bool(port_properties["out-of-service"]),
+            f"IPv4 {target_address}/{local_interface.network.prefixlen}, UDP {BACNET_PORT}, "
+            f"link {float(port_properties['link-speed']) / 1_000_000:.0f} Mbit/s",
+            f"unexpected Network Port values: {json_safe(port_properties)}",
+        )
         folded = [name.casefold() for name in names]
         self.report.require(
             "BACnet Object_Name uniqueness",
