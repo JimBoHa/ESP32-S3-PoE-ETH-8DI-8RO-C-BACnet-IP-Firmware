@@ -42,6 +42,11 @@ documented in [Hardware acceptance testing](HARDWARE_TESTING.md). Its JSON
 report should be retained with release test evidence; do not commit site
 addresses, commissioning keys, or unrelated BAS inventory.
 
+Run long-duration health monitoring with the host-side logger described in
+[Soak testing](SOAK_TESTING.md). It probes both BACnet/IP and HTTP, detects
+restarts/configuration changes/relay activity/heap-floor violations, and does
+not add periodic writes to ESP32 NVS or flash.
+
 Initial 0.10.0 bench validation on 2026-08-31 read each Binary Input over
 BACnet/IP for at least three seconds and commanded each Binary Output as the
 only active channel for at least three seconds. Every BACnet write was read

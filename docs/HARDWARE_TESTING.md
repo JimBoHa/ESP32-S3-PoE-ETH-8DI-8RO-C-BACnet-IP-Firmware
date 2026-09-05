@@ -49,3 +49,6 @@ behavior. Complete those checks with a meter and a protected input fixture.
 Cold boot, brownout, rapid power cycling, failed-startup OTA rollback, and
 corrupt-NVS recovery also require USB recovery access and remain separate
 field tests.
+
+After the finite HIL suite passes, use the [soak monitor](SOAK_TESTING.md) for
+the release endurance run.
