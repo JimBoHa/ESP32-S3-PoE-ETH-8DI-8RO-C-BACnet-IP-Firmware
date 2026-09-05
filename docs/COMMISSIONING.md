@@ -1,6 +1,6 @@
 # Commissioning and recovery
 
-Version 0.13.0 has completed the software-visible target-board acceptance
+Version 0.13.2 has completed the software-visible target-board acceptance
 suite but not the field electrical, destructive recovery, proprietary-client,
 or endurance checks listed in [Development and release](DEVELOPMENT.md). Use a
 bench unit, disconnect relay loads, and preserve a way to restore the
