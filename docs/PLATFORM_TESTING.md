@@ -38,10 +38,25 @@ export locking, Ethernet discovery, and reconnect without resetting the
 controller. A signed Ethernet OTA update and subsequent reboot passed, with
 26 read-only BACnet checks afterward. See [development validation](DEVELOPMENT.md).
 
-Windows browser compatibility is tested above. A Windows controller test is
-still required to validate its COM-port driver, USB reset/re-enumeration,
-complete 16 MB transfer, and the first-boot key window. Passing browser tests
-must not be described as passing a physical Windows flash.
+An additional Windows hardware check on 2026-09-07 used Windows 11 Home Single
+Language 25H2 ARM64 (build 26200.8037) in UTM 4.7.5 with the real controller
+attached through USB passthrough. Windows enumerated the Espressif
+VID `303A`, PID `1001` device as `USB Serial Device (COM3)`. Two connections
+using Windows .NET `SerialPort` each received five valid firmware 0.14.0
+`STATUS` replies and confirmed that `KEY` was denied while export was locked.
+The second connection left the reboot count unchanged. Ethernet, RTC, relay
+controller health, and 26 read-only BACnet checks passed afterward; inputs and
+relay commands remained inactive.
+
+Windows used Microsoft's signed USB serial driver version 10.0.26100.4202;
+no third-party serial driver was needed for this controller in this VM.
+
+That Windows hardware check exercises the COM-port driver and the firmware's
+USB protocol. It does not exercise browser Web Serial. The Windows Edge
+152.0.4191.66 browser hardware sequence remains pending: native device
+selection, full 16 MB backup, erase/flash verification, USB boot handoff, and
+the first-boot key download/lock. Passing the CI matrix or the native serial
+probe must not be described as passing a physical Windows browser flash.
 
 ## Windows hardware test procedure
 
