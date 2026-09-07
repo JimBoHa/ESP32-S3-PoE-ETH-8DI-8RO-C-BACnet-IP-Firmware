@@ -21,9 +21,9 @@ export class UsbHardReset {
   }
 }
 
-// esptool-js 0.6.1 readFlash requests 1024 in-flight blocks and leaves the
-// stub's final digest unread. A single-block window limits native USB
-// overruns; preallocation avoids repeatedly copying a growing 16 MB array.
+// esptool-js 0.6.1 readFlash leaves the stub's final digest unread. Consume
+// and verify it here, using the maintained stub's single-block flow control.
+// Preallocation avoids repeatedly copying a growing 16 MB array.
 // Protocol: https://docs.espressif.com/projects/esptool/en/latest/esp32s3/advanced-topics/serial-protocol.html
 export async function readFlashRegion(loader, offset, size, onProgress = () => {}) {
   const blockSize = 4096;

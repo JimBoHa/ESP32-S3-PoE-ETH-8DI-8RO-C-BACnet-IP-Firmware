@@ -8,6 +8,9 @@ for (const name of ["esptool-js", "pako", "spark-md5"]) {
   parts.push(`\n${name} ${metadata.version} (${metadata.license})\n`,
     await readFile(new URL("LICENSE", root), "utf8"));
 }
+parts.push("\nesp-flasher-stub 1.2.2 (MIT option) — ESP32-S3 RAM loader\n" +
+  "Source: https://github.com/espressif/esp-flasher-stub/tree/v1.2.2\n",
+  await readFile(new URL("../node_modules/esp-flasher-stub/LICENSE-MIT", import.meta.url), "utf8"));
 for (const file of ["deflate.js", "inflate.js"]) {
   const source = await readFile(new URL(`../node_modules/pako/lib/zlib/${file}`, import.meta.url), "utf8");
   const notice = source.match(/\/\/ \(C\)[\s\S]+?(?=\n\n)/)?.[0];

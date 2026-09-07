@@ -6,6 +6,7 @@ import shutil
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 from tools.collect_installer_releases import main, select_releases, stable_version, unpack
@@ -47,11 +48,15 @@ class CollectInstallerReleasesTests(unittest.TestCase):
                 return ""
             arguments = ["collect", "--repository", "owner/repo", "--tag", "v0.14.0",
                          "--candidate-root", str(root / "missing"), "--output", str(root / "site"),
-                         "--new-asset", str(root / "replacement.tar.gz")]
+                         "--new-asset", str(root / "replacement.tar.gz"),
+                         "--new-zip", str(root / "desktop.zip")]
             with patch("sys.argv", arguments), patch("tools.collect_installer_releases.gh", side_effect=fake_gh), contextlib.redirect_stdout(io.StringIO()):
                 main()
             self.assertFalse((root / "replacement.tar.gz").exists())
             self.assertEqual((root / "site/0.14.0/initial-flash.bin").read_bytes(), (source / "initial-flash.bin").read_bytes())
+            with zipfile.ZipFile(root / "desktop.zip") as desktop:
+                self.assertEqual(desktop.read("v0.14.0/initial-flash.bin"), (source / "initial-flash.bin").read_bytes())
+                self.assertEqual(desktop.read("v0.14.0/manifest.json"), (source / "manifest.json").read_bytes())
 
     def test_only_approved_older_packages_are_kept(self):
         releases = [release("v0.14.2"), release("v0.14.1"), release("v0.14.0"),

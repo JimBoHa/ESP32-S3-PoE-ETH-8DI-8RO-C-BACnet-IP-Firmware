@@ -47,6 +47,12 @@ The browser installer bundles [esptool-js 0.6.1](https://github.com/espressif/es
 `npm run build` copies their license texts into the site's `licenses.txt`.
 Package versions and integrity hashes are pinned in `installer/package-lock.json`.
 
+The installer replaces esptool-js's legacy flasher binaries with the ESP32-S3
+RAM loader from [esp-flasher-stub 1.2.2](https://github.com/espressif/esp-flasher-stub/tree/v1.2.2),
+under its MIT license option. Its copyright and license are also included in
+`licenses.txt`. Only this supported-chip stub is bundled. The RAM loader is an
+installation tool and is not linked into the controller's application firmware.
+
 `installer/public/board-reference.jpg` is a Waveshare product photograph used
 to identify the supported hardware. Copyright remains with Waveshare; this
 image is excluded from the project's 0BSD license.

@@ -87,9 +87,11 @@ used. Microsoft UI Automation controlled the actual dialog; its native filename
 textbox was filled using the Win32 control API because Windows on ARM exposes
 it as a generic accessibility pane. File contents were read by the browser.
 
-A full Chrome backup exposed an incomplete packet with four blocks in flight.
-The installer now requests one unacknowledged block at a time, with the same
-chunk and whole-flash integrity checks and bounded retries. Full v1.0 hardware
+A full Chrome backup exposed dropped bytes with esptool-js's bundled legacy
+RAM loader. Changing its transfer window or baud rate did not fix the failure.
+The installer now pins Espressif's maintained `esp-flasher-stub` 1.2.2 S3 loader,
+which passed the same diagnostic reads at both tested speeds. It retains chunk
+and whole-flash integrity checks and bounded retries. Full v1.0 hardware
 validation in Chrome and Edge is still in progress. A native x64-PC USB test
 requires separate hardware; x64 GitHub runner checks do not replace it.
 
@@ -134,9 +136,11 @@ The script blocks external requests and never opens a serial device. Regenerate
 them with `npm run screenshots` inside `installer/`, then inspect every image.
 Capture metadata is stored in [captures.json](images/captures.json).
 
-Published captures contain only page content from a fresh, isolated browser
-context. They exclude the desktop, browser tabs/profile, native file pickers,
-usernames, personal files, and real controller identifiers. All network and
-device values are examples; the example admin key remains masked. The PNGs
-contain only image chunks, with no embedded text, EXIF, or location metadata.
-Preserve these privacy properties when refreshing the screenshots.
+The generated page captures use a fresh, isolated browser context. They exclude
+the desktop, browser tabs/profile, usernames, personal files, and real controller
+identifiers. Network and device values are examples; the example admin key
+remains masked. Separate native Windows captures show only the selected USB
+dialog or relevant file-dialog controls from the dedicated test environment;
+see [native-captures.json](images/native-captures.json). No key contents or
+personal folders are included. Published PNGs contain no embedded text, EXIF,
+or location metadata. Preserve these privacy properties when refreshing them.

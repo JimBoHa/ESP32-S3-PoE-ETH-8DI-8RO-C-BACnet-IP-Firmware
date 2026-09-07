@@ -13,6 +13,7 @@
     "screenshots": "node scripts/screenshots.js"
   },
   "dependencies": {
+    "esp-flasher-stub": "1.2.2",
     "esptool-js": "0.6.1",
     "spark-md5": "3.0.2"
   },
