@@ -38,25 +38,40 @@ export locking, Ethernet discovery, and reconnect without resetting the
 controller. A signed Ethernet OTA update and subsequent reboot passed, with
 26 read-only BACnet checks afterward. See [development validation](DEVELOPMENT.md).
 
-An additional Windows hardware check on 2026-09-07 used Windows 11 Home Single
-Language 25H2 ARM64 (build 26200.8037) in UTM 4.7.5 with the real controller
-attached through USB passthrough. Windows enumerated the Espressif
-VID `303A`, PID `1001` device as `USB Serial Device (COM3)`. Two connections
-using Windows .NET `SerialPort` each received five valid firmware 0.14.0
-`STATUS` replies and confirmed that `KEY` was denied while export was locked.
-The second connection left the reboot count unchanged. Ethernet, RTC, relay
-controller health, and 26 read-only BACnet checks passed afterward; inputs and
-relay commands remained inactive.
+The Windows browser hardware test on 2026-09-07 used **Edge 152.0.4191.66** on
+Windows 11 Home Single Language 25H2 ARM64 (build 26200.8037), in UTM 4.7.5
+with the real controller attached through USB passthrough. Windows enumerated
+Espressif VID `303A`, PID `1001` as `USB Serial Device (COM3)`, using Microsoft's
+signed USB serial driver version 10.0.26100.4202. No third-party serial driver
+was needed for this controller in this VM.
 
-Windows used Microsoft's signed USB serial driver version 10.0.26100.4202;
-no third-party serial driver was needed for this controller in this VM.
+| Hardware check through Windows Edge | Result |
+|---|---|
+| Full 16,777,216-byte browser backup | Passed; chunk and whole-flash MD5 verified, downloaded-file SHA-256 matched after copying to macOS |
+| Erase, write, flash verification, and USB boot handshake | Passed with firmware 0.14.0 |
+| First-boot key download and explicit export lock | Passed; a new key was saved privately and subsequent export was denied |
+| Running-device connect and disconnect | Passed without a reset, including after installation and Ethernet OTA |
+| Installer Ethernet discovery and **Open device** link | Passed; the link opened the real management interface |
+| Key-file loading, signed Ethernet OTA, and signed reboot | Passed; the other OTA slot booted and the same key authorized a subsequent reboot |
+| Controller health and 26 read-only BACnet checks | Passed after installation and OTA/reboot; inputs and relay commands were inactive |
 
-That Windows hardware check exercises the COM-port driver and the firmware's
-USB protocol. It does not exercise browser Web Serial. The Windows Edge
-152.0.4191.66 browser hardware sequence remains pending: native device
-selection, full 16 MB backup, erase/flash verification, USB boot handoff, and
-the first-boot key download/lock. Passing the CI matrix or the native serial
-probe must not be described as passing a physical Windows browser flash.
+This test exposed a Windows disconnect reset. The installer now clears RTS
+before DTR, in separate calls, before closing USB setup. The corrected sequence
+passed the physical checks above and a regression test that models Windows
+clearing DTR before RTS. A second regression test verifies port cleanup after
+signal-control failure. All 22 JavaScript unit tests, 15 Chromium browser tests,
+and the production installer build passed locally.
+
+Playwright drove an isolated Edge profile in the normal Windows user session.
+The real USB port was preauthorized only for the loopback installer origin and
+the device's exact VID/PID, using Microsoft's
+[SerialAllowUsbDevicesForUrls policy](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies/serialallowusbdevicesforurls).
+The policy was restored after each run. Only port selection was substituted;
+all serial transfers, firmware replies, downloads, and Ethernet requests used
+the real browser and controller. Native Windows device/file chooser dialogs
+were not exercised. Windows Chrome and native x64-PC USB flashing remain
+separate hardware checks; their CI results above do not replace them. Physical
+BOOT-button recovery and public GitHub Pages deployment also remain untested.
 
 ## Windows hardware test procedure
 

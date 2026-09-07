@@ -90,7 +90,18 @@ export class SetupClient {
     this.closed = true;
     if (this.reader) await this.reader.cancel().catch(() => {});
     await this.reading;
-    if (this.port.readable || this.port.writable) await this.port.close();
+    if (this.port.readable || this.port.writable) {
+      try {
+        // Windows may clear DTR before RTS when closing the port. DTR=0
+        // with RTS=1 triggers an ESP32-S3 reset through USB Serial/JTAG.
+        // Clear RTS first, in a separate call, to avoid that intermediate
+        // state even when the driver applies signal changes sequentially.
+        await this.port.setSignals({ requestToSend: false });
+        await this.port.setSignals({ dataTerminalReady: false });
+      } finally {
+        await this.port.close();
+      }
+    }
     this.buffer = "";
   }
 }

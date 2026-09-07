@@ -64,10 +64,26 @@ and again after OTA. All eight inputs and relay commands were inactive; RTC,
 relay-controller, Ethernet, and BACnet health checks passed. Private backups,
 keys, and site-specific reports are retained outside the repository.
 
-This validates the installation workflow, not the full hardware acceptance or
-endurance suite below. Physical BOOT-button key recovery, Windows/Edge USB
-behavior, and public GitHub Pages deployment remain separate checks. Automated
-tests cover the BOOT hold duration, export expiry, and lock policy.
+The Windows hardware run also completed the full browser backup, erase/flash,
+USB boot, key download/lock, Ethernet handoff, signed OTA, and signed reboot in
+Edge 152.0.4191.66 on Windows 11 ARM64 with real USB passthrough. A Windows
+disconnect reset was reproduced and fixed: USB setup now clears RTS before
+DTR in separate calls before closing the port. This avoids the intermediate
+RTS=1, DTR=0 reset state described in the USB Serial/JTAG chapter of the
+[ESP32-S3 technical reference manual](https://documentation.espressif.com/esp32-s3_technical_reference_manual_en.pdf).
+Separate calls matter because Chromium's Windows
+[signal-control implementation](https://chromium.googlesource.com/chromium/src/+/3f506bc44cf5a6c0c7c0058b5f7ab31eead19fbd/services/device/serial/serial_io_handler_win.cc)
+processes DTR before RTS when both are supplied together. Hardware reconnect
+and disconnect checks then passed without a reset. The expanded 22-test Node
+suite, 15 Chromium browser tests, and production build passed; 26 read-only
+BACnet checks passed after Windows installation and OTA/reboot.
+
+See [platform testing](PLATFORM_TESTING.md) for exact Windows driver, VM,
+automation, and native-dialog coverage limits. This validates the installation
+workflow, not the full hardware acceptance or endurance suite below. Physical
+BOOT-button key recovery and public GitHub Pages deployment remain separate
+checks. Automated tests cover the BOOT hold duration, export expiry, and lock
+policy.
 
 The repeatable live BACnet suite and its explicit relay safety gate are
 documented in [Hardware acceptance testing](HARDWARE_TESTING.md). Its JSON
