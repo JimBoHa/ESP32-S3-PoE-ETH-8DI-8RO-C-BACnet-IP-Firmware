@@ -19,7 +19,11 @@ idf.py build
 ```
 
 `sdkconfig` is generated and ignored. Committed `sdkconfig.defaults` and
-`partitions.csv` define the reproducible inputs.
+`partitions.csv` define the reproducible inputs. Regenerate `sdkconfig` before
+a release build; an older ignored file can otherwise retain obsolete values.
+The application has a compile-time assertion requiring a BACnet UDP receive
+mailbox of at least 64 datagrams, and the compiled value is exposed at runtime
+as `bacnet_udp_receive_mailbox_size`.
 
 ## Tests
 

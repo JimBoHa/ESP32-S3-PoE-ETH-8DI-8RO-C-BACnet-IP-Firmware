@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "sdkconfig.h"
 #include "esp_app_desc.h"
 #include "esp_check.h"
 #include "esp_event.h"
@@ -21,6 +22,11 @@
 #include "web_admin.h"
 
 static const char *TAG = "app";
+
+_Static_assert(CONFIG_LWIP_UDP_RECVMBOX_SIZE >=
+        FW_MIN_BACNET_UDP_RECEIVE_MAILBOX_SIZE,
+    "BACnet UDP receive mailbox is below the release minimum; regenerate "
+    "sdkconfig from sdkconfig.defaults");
 
 static bool running_image_pending_verification(void)
 {
@@ -45,6 +51,8 @@ void app_main(void)
     const esp_app_desc_t *app = esp_app_get_description();
     ESP_LOGI(TAG, "%s firmware %s", FW_PRODUCT_NAME, app->version);
     ESP_LOGI(TAG, "ESP-IDF reset reason code: %d", (int)esp_reset_reason());
+    ESP_LOGI(TAG, "BACnet UDP receive mailbox: %d datagrams",
+        CONFIG_LWIP_UDP_RECVMBOX_SIZE);
     bool pending_verify = running_image_pending_verification();
 
     esp_err_t result = nvs_flash_init();
