@@ -57,6 +57,21 @@ Inputs are sampled every 20 ms and accepted after three matching samples.
 inverts that channel; clear the bit only after verifying the electrical signal
 on that channel.
 
+The manufacturer specifies both passive (dry-contact) and active 5-36 V input
+support. For a passive maintained switch, connect one switch contact to `DGND`
+and the other to the desired `DI1`-`DI8` terminal. Multiple switches may share
+the controller's `DGND` terminal. Leave the controller terminal labeled `COM`
+unused in this dry-contact arrangement and do not apply external voltage. With
+the default active-low configuration, a closed contact is BACnet `ACTIVE` and
+an open contact is `INACTIVE` after the nominal 60 ms debounce interval.
+
+On an SPDT switch, its lug labeled `COM` is the movable switch contact and is
+not the controller terminal of the same name; use the switch's `COM` and `NO`
+lugs for active-when-closed behavior. Follow Waveshare's separate wet-contact
+wiring diagram before connecting an externally powered NPN or PNP signal:
+[product page](https://www.waveshare.com/ESP32-S3-ETH-8DI-8RO-C.htm) and
+[hardware wiki](https://www.waveshare.com/wiki/ESP32-S3-ETH-8DI-8RO-C).
+
 ## Electrical safety
 
 - Have qualified personnel handle mains and other hazardous relay circuits.
