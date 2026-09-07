@@ -44,6 +44,44 @@ test("setup reuses the open flashing port without another OS open or reset", asy
   await client.close();
 });
 
+test("closing setup avoids a reset when Windows clears DTR before RTS", async () => {
+  const port = fakePort(() => {});
+  let dtr = true, rts = true, resets = 0;
+  const signal = (name, value) => {
+    if (name === "dataTerminalReady") dtr = value;
+    if (name === "requestToSend") rts = value;
+    // ESP32-S3 USB Serial/JTAG interprets this line state as a SoC reset.
+    if (rts && !dtr) resets++;
+  };
+  port.setSignals = async (signals) => {
+    // The Windows API handles DTR before RTS, regardless of property order.
+    for (const name of ["dataTerminalReady", "requestToSend"]) {
+      if (name in signals) signal(name, signals[name]);
+    }
+  };
+  const close = port.close.bind(port);
+  port.close = async () => {
+    signal("dataTerminalReady", false);
+    signal("requestToSend", false);
+    await close();
+  };
+  const client = new SetupClient(port);
+  await client.open();
+  await client.close();
+  assert.equal(resets, 0, "closing USB setup must not briefly assert reset");
+  assert.equal(port.readable, null);
+});
+
+test("closing setup releases the port even if a removed device rejects signal changes", async () => {
+  const port = fakePort(() => {});
+  port.setSignals = async () => { throw new Error("USB device disconnected"); };
+  const client = new SetupClient(port);
+  await client.open();
+  await assert.rejects(client.close(), /USB device disconnected/);
+  assert.equal(port.readable, null);
+  assert.equal(port.writable, null);
+});
+
 test("locked key response gives physical recovery instructions without exposing serial contents", async () => {
   const port = fakePort((text, source) => {
     const id = text.split(" ")[1];

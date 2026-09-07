@@ -75,6 +75,8 @@ Click **Download admin key**. Confirm that the `.key` file is saved in Downloads
 and keep a private recovery copy. Do not post it in GitHub issues or screenshots.
 Connect Ethernet to a network with DHCP. The installer shows the actual device
 address when available, plus relay-controller and RTC health.
+For immediate management access, wait for **Ethernet connected** and the
+**Open device** button before finishing USB setup.
 
 ![Step 4: private key download and the discovered Ethernet address](images/install-04-key-network.png)
 
@@ -128,7 +130,7 @@ removes the old settings.
 | Backup fails | Nothing has been erased. Disconnect and reconnect in the installer, then retry. Incomplete or checksum-failing backups are never offered for download. |
 | Flash transfer interrupted | Reconnect and repeat installation. A partially written image may not boot, but the ROM USB downloader remains available. |
 | Flash verified, USB setup interrupted | Disconnect and reconnect in the installer. A successful flash does not need another erase; use BOOT key recovery if the first-boot window expired. |
-| No Ethernet address | Check Ethernet, DHCP, switch VLAN, and PoE. The page keeps polling USB and shows the MAC for DHCP lease lookup. |
+| No Ethernet address | Check Ethernet, DHCP, switch VLAN, and PoE. While USB setup is connected, the page polls for an address and shows the MAC for DHCP lease lookup. If setup has already finished, reconnect here to discover the address; your saved key remains valid. |
 
 The browser can save a complete flash backup, but this installer deliberately
 accepts only approved release images for writing. Restoring a private full
