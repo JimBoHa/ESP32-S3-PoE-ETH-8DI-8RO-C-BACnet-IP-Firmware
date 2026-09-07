@@ -1,6 +1,6 @@
 # BACnet implementation summary
 
-This is an engineering PICS-style summary for firmware 0.13.2. It is not a BTL
+This is an engineering PICS-style summary for firmware 0.13.5. It is not a BTL
 test report, listing, or certification claim.
 
 ## Device and data link

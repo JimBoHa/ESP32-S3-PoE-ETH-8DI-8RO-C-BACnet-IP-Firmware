@@ -5,10 +5,10 @@ commands, and device health from the Waveshare
 `ESP32-S3-POE-ETH-8DI-8RO-C` as BACnet/IP objects. It replaces the factory
 application and provides authenticated firmware updates over Ethernet.
 
-> **Hardware bring-up firmware:** version 0.13.2 has completed the
+> **Hardware bring-up firmware:** version 0.13.5 has completed the
 > software-visible target-board acceptance suite: safe relay startup, RTC and
 > W5500 health, DHCP/ICMP/HTTP, BACnet discovery/properties/COV/priorities, all
-> eight one-at-a-time Binary Output commands, 32-request discovery bursts,
+> eight one-at-a-time Binary Output commands, 64-request discovery bursts,
 > malformed-packet recovery, persistent configuration, and successful and
 > rejected Ethernet OTA paths. Electrically stimulated inputs, relay contact
 > feedback, destructive recovery tests, proprietary BAS clients, and the
@@ -93,14 +93,14 @@ tests/run_host_tests.sh
 python tools/package_release.py
 ```
 
-The package is written to `release/v0.13.2/` and contains:
+The package is written to `release/v0.13.5/` and contains:
 
 - `initial-flash.bin` for the first USB installation;
 - `firmware-ota.bin` for later Ethernet updates;
 - individual bootloader, partition-table, and OTA-data images;
 - a manifest, SHA-256 checksum list, and license notices.
 
-The application partition is 6 MiB. Version 0.13.2 is 577,840 bytes and leaves
+The application partition is 6 MiB. Version 0.13.5 is 578,160 bytes and leaves
 about 91% of either application slot free.
 
 ## Web management
@@ -193,7 +193,7 @@ Upload only `firmware-ota.bin`, never the merged initial-flash image:
 python tools/device_admin.py \
   --device 192.168.75.153 \
   --key-file device.key \
-  ota --file release/v0.13.2/firmware-ota.bin --yes
+  ota --file release/v0.13.5/firmware-ota.bin --yes
 ```
 
 The client checks the ESP image header and project identity. The device signs
