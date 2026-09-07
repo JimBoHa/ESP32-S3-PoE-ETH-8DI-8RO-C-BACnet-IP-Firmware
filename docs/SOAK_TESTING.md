@@ -46,7 +46,7 @@ For a release gate, require all 1,441 scheduled samples, zero request failures,
 zero health alerts, no unexpected restart or relay activity, and a final
 summary with `"success":true`. Choose a heap threshold only after measuring the
 release's normal baseline; 250,000 bytes provides a modest margin below the
-observed v0.13.2 bench floor.
+264,508-byte minimum observed during v0.13.5 malformed-packet bench testing.
 
 Inspect progress from another terminal without changing the log:
 
