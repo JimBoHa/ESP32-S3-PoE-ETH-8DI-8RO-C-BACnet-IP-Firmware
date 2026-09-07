@@ -10,6 +10,39 @@ permissions:
   contents: read
 
 jobs:
+  desktop-browsers:
+    name: Desktop browsers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    env:
+      INSTALLER_BROWSERS: chrome,msedge
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: installer/package-lock.json
+      - name: Install and test desktop browsers
+        working-directory: installer
+        run: |
+          npm ci
+          npm test
+          npx playwright install chrome msedge
+          npm run test:browser
+          npm run build
+      - name: Retain browser test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-browser-results-${{ matrix.os }}
+          path: installer/test-results/
+          if-no-files-found: ignore
+
   host-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 10
