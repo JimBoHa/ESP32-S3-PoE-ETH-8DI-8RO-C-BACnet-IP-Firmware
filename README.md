@@ -35,6 +35,21 @@ See the [illustrated setup and publishing guide](docs/BROWSER_INSTALLER.md).
 For later updates, use the device's **Firmware** tab; Ethernet updates preserve
 the admin key and settings.
 
+![USB installer: connect the supported board from a desktop browser](docs/images/install-01-connect.png)
+
+## Interface preview
+
+Monitor eight inputs, command eight relays at a selected BACnet priority,
+inspect device health, configure networking and object names, and update
+firmware through the device's web interface.
+
+![Relay control and input monitoring in the device interface](docs/images/firmware-relays.png)
+
+Screenshots show the actual interfaces with example data; addresses, keys,
+and I/O states are illustrative. See the [interface tour](docs/INTERFACE_GUIDE.md)
+for all four tabs and the [Windows/Mac test record](docs/PLATFORM_TESTING.md)
+for the distinction between browser tests and physical USB validation.
+
 ## Features
 
 - BACnet/IP over the onboard W5500, UDP port 47808 by default.
@@ -235,6 +250,8 @@ ACLs. Read [Security](docs/SECURITY.md) before deployment.
 
 - [Commissioning and recovery](docs/COMMISSIONING.md)
 - [Browser installation and release publishing](docs/BROWSER_INSTALLER.md)
+- [Interface tour with screenshots](docs/INTERFACE_GUIDE.md)
+- [Windows and Mac compatibility testing](docs/PLATFORM_TESTING.md)
 - [Hardware mapping and electrical cautions](docs/HARDWARE.md)
 - [Hardware acceptance testing](docs/HARDWARE_TESTING.md)
 - [Soak testing and health logs](docs/SOAK_TESTING.md)

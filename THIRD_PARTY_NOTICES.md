@@ -40,6 +40,8 @@ Package versions and integrity hashes are pinned in `installer/package-lock.json
 `installer/public/board-reference.jpg` is a Waveshare product photograph used
 to identify the supported hardware. Copyright remains with Waveshare; this
 image is excluded from the project's Apache-2.0 license.
+The same exclusion applies to the photograph reproduced inside documentation
+screenshots in `docs/images/`.
 Source: <https://www.waveshare.com/img/devkit/accBoard/ESP32-S3-ETH-8DI-8RO-C/ESP32-S3-ETH-8DI-8RO-C-details-2-2.jpg>.
 
 ## Standards and marks

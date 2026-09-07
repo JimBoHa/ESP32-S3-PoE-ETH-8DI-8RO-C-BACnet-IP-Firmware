@@ -14,26 +14,88 @@ Photo: [Waveshare product reference](https://www.waveshare.com/esp32-s3-eth-8di-
 Match the entire label, including **POE** and **-C**. Chip detection checks
 ESP32-S3 and 16 MB flash; it cannot identify the enclosure or relay wiring.
 
-## First installation
+## Windows and Mac preparation
 
-1. Disconnect controlled relay loads. Connect USB-C and open the
-   [USB installer](https://JimBoHa.github.io/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware/).
-2. Click **Connect controller**. Select **USB JTAG/serial debug unit** and
-   approve the browser's serial connection.
-3. Confirm the board model. If you want a recovery image of the current
-   firmware and settings, choose **Download backup**. The full 16 MB image
-   includes private data; keep it private. Wait for the completed download.
-4. Select the recommended release and acknowledge the erase. Click
-   **Erase & install firmware**. Keep USB connected and the tab open.
-5. The installer checks the download's SHA-256, erases flash, writes the
-   merged image, verifies flash with MD5, and checks the running firmware's
-   project and version. Wait for **Firmware installed**.
-6. Click **Download admin key**. Confirm that the `.key` file reached your
-   Downloads folder; keep a private recovery copy. Click **Finish USB setup**
-   to lock key export and release the serial port.
-7. Click **Open device**. In its management page, choose **Load key file** and
-   select the downloaded key when you need to make changes. The file is read
-   locally; only signed management requests leave the browser.
+The same HTTPS installer is used on both platforms. Use a current desktop
+Chrome or Edge browser. The browser opens the USB device directly; users do
+not need Python, ESP-IDF, Docker, or a virtual machine.
+
+| Windows | Mac |
+|---|---|
+| Connect the USB-C data cable and allow Windows to finish detecting the device. | Unlock the Mac and connect the USB-C data cable. |
+| The browser picker may include a `COM` number alongside the USB device name. Select the Espressif USB serial device. | If macOS asks whether to allow the accessory, choose **Allow**. |
+| If the picker is empty, check **Device Manager → Ports (COM & LPT)** for the controller's serial port. | If the picker is empty, close serial monitors and other browser tabs holding the port, then try another data cable or USB port. |
+| Follow the [Espressif USB Serial/JTAG guide](https://docs.espressif.com/projects/esp-idf/en/v5.5.4/esp32s3/api-guides/usb-serial-jtag-console.html) if Windows does not expose a serial port. This is the board's native USB interface. | See [Apple's accessory permission instructions](https://support.apple.com/102282) if the accessory remains blocked. |
+
+Automated Chrome/Edge browser tests pass on Windows and macOS. Physical USB
+validation is recorded separately in [platform testing](PLATFORM_TESTING.md).
+Browser support alone does not prove every USB cable, driver, or VM works.
+
+## First installation, with screenshots
+
+These screenshots are rendered from the actual application with isolated
+example data. `192.0.2.140`, the example device identity, and sample I/O states
+are not your controller's address or live readings. The native device picker
+and file chooser vary with operating system and browser.
+
+### 1. Connect the controller
+
+Disconnect controlled relay loads. Connect USB-C and open the
+[USB installer](https://JimBoHa.github.io/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware/).
+Click **Connect controller**, select **USB JTAG/serial debug unit** (or the
+corresponding USB serial/COM device), and approve the serial connection.
+
+![Step 1: connect the exact Waveshare controller](images/install-01-connect.png)
+
+### 2. Confirm the board, back up, and select a release
+
+Check that the full product label matches the board pictured. If you want a
+recovery copy of the current firmware and settings, choose **Download backup**.
+Wait for the completed full 16 MB download before proceeding. The backup may
+contain private keys; keep it private.
+
+Select the recommended firmware. Read the erase notice and tick its checkbox
+when ready. Installation replaces firmware and erases saved settings,
+including the admin key.
+
+![Step 2: board confirmation, optional backup, version, and erase acknowledgement](images/install-02-confirm.png)
+
+### 3. Install and wait for verification
+
+Click **Erase & install firmware**. Keep USB connected and the tab open.
+The installer checks the download's SHA-256, erases flash, writes the merged
+image, verifies flash with MD5, and checks the running project's identity and
+version. Wait for **Firmware installed** before continuing.
+
+![Step 3: firmware writing progress; leave USB connected](images/install-03-writing.png)
+
+### 4. Save the new admin key and find the Ethernet address
+
+Click **Download admin key**. Confirm that the `.key` file is saved in Downloads
+and keep a private recovery copy. Do not post it in GitHub issues or screenshots.
+Connect Ethernet to a network with DHCP. The installer shows the actual device
+address when available, plus relay-controller and RTC health.
+
+![Step 4: private key download and the discovered Ethernet address](images/install-04-key-network.png)
+
+### 5. Finish USB setup
+
+Once the key file is saved, click **Finish USB setup**. This locks key export
+and releases the serial port. **USB setup complete** confirms this step.
+Keep PoE or suitable external power connected when unplugging USB.
+
+![Step 5: setup complete, key export locked, and Ethernet handoff](images/install-05-complete.png)
+
+### 6. Open the device and load the key
+
+Click **Open device**. On its **Relay Control** tab, choose **Load key file**
+and select the downloaded `.key` file. Leave the key masked. The file is read
+locally; only signed management requests leave the browser.
+
+![Step 6: load the downloaded key file locally](images/install-06-load-key.png)
+
+Use [the interface tour](INTERFACE_GUIDE.md) for relay control, status,
+configuration, and later Ethernet updates.
 
 If PoE or suitable external power remains connected, you may disconnect USB
 after setup finishes. If USB is the only supply, removing it turns the device
@@ -77,11 +139,13 @@ That restores the old firmware, settings, and key together.
 ## Later firmware updates
 
 Download **Ethernet update** from the installer or `firmware-ota.bin` from a
-GitHub release. Open the device's **Firmware** tab, load the saved admin key,
-choose the app-only image, and upload. Settings and key are preserved. Never
+GitHub release. Load the saved admin key on **Relay Control**, then open the
+device's **Firmware** tab, choose the app-only image, and upload. Settings and key are preserved. Never
 upload `initial-flash.bin` or a full backup through Ethernet OTA.
 After the device returns online, refresh its management page and load the key
 file again before issuing more commands.
+
+![Ethernet firmware update from the device interface](images/firmware-update.png)
 
 ## Maintainer: publish without a command line
 
@@ -136,6 +200,12 @@ Automated browser tests substitute the device adapter with an isolated test
 fixture; firmware integrity, protocol, and policy tests run separately. These
 tests do not substitute for a physical USB backup/flash/boot/key test. The
 production bundle contains no simulated devices or test credentials.
+
+To refresh the documentation screenshots, run `npm run screenshots` from
+`installer/` after installing the Playwright Chromium browser. The capture
+script renders the real interfaces against isolated example fixtures, blocks
+external requests, and writes PNG files plus capture metadata to `docs/images/`.
+It does not connect to or change a controller. Review every image before committing.
 
 ## USB setup protocol and implementation
 
