@@ -83,6 +83,13 @@ class WebUiTests(unittest.TestCase):
         for reason in ("power-on", "software", "panic", "task-watchdog", "brownout"):
             self.assertIn(f'"{reason}"', self.web_admin)
 
+    def test_udp_receive_capacity_is_exposed(self) -> None:
+        self.assertIn('id="sUdpMailbox"', self.page)
+        self.assertIn("status.bacnet_udp_receive_mailbox_size", self.page)
+        self.assertIn('"bacnet_udp_receive_mailbox_size"', self.web_admin)
+        self.assertIn("CONFIG_LWIP_UDP_RECVMBOX_SIZE", self.app_main)
+        self.assertIn("_Static_assert", self.app_main)
+
     def test_relay_validation_errors_are_specific(self) -> None:
         for message in (
             "channel must be between 1 and %u",

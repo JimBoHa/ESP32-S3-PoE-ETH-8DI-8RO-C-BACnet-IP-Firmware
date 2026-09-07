@@ -24,6 +24,7 @@ REQUIRED_BACPYPES3_VERSION = "0.0.106"
 BACNET_PORT = 47808
 MAX_DEVICE_INSTANCE = 4_194_302
 RELAY_COUNT = 8
+MINIMUM_BACNET_UDP_RECEIVE_MAILBOX_SIZE = 64
 INPUT_COUNT = 8
 RELAY_CONFIRMATION = "loads-disconnected"
 MAX_HTTP_RESPONSE_SIZE = 1024 * 1024
@@ -375,6 +376,22 @@ class HilRunner:
             )
 
     async def test_object_model(self) -> None:
+        status = await asyncio.to_thread(
+            fetch_http_status, self.args.device_address, self.args.timeout
+        )
+        mailbox_size = status.get("bacnet_udp_receive_mailbox_size")
+        mailbox_valid = (
+            isinstance(mailbox_size, int)
+            and not isinstance(mailbox_size, bool)
+            and mailbox_size >= MINIMUM_BACNET_UDP_RECEIVE_MAILBOX_SIZE
+        )
+        self.report.require(
+            "Compiled BACnet UDP receive capacity",
+            mailbox_valid,
+            f"{mailbox_size} datagrams",
+            f"expected at least {MINIMUM_BACNET_UDP_RECEIVE_MAILBOX_SIZE}, "
+            f"received {mailbox_size!r}",
+        )
         object_count = await self.read(f"device,{self.args.device_instance}", "object-list", 0)
         self.object_list = list(
             await self.read(f"device,{self.args.device_instance}", "object-list")

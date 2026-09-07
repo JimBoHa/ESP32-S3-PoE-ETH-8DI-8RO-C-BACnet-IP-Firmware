@@ -6,6 +6,7 @@
 #include <strings.h>
 #include <string.h>
 
+#include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "cJSON.h"
@@ -178,6 +179,8 @@ static esp_err_t status_handler(httpd_req_t *request)
     cJSON_AddBoolToObject(root, "bacnet_running", bacnet_app_running());
     cJSON_AddNumberToObject(root, "bacnet_device_instance", config.device_instance);
     cJSON_AddNumberToObject(root, "bacnet_udp_port", config.bacnet_port);
+    cJSON_AddNumberToObject(root, "bacnet_udp_receive_mailbox_size",
+        CONFIG_LWIP_UDP_RECVMBOX_SIZE);
     cJSON_AddNumberToObject(root, "bacnet_vendor_id", config.vendor_id);
     cJSON_AddNumberToObject(root, "bacnet_packets_received", bacnet_app_packet_count());
     cJSON_AddNumberToObject(root, "digital_inputs_mask", board_io_inputs_mask());

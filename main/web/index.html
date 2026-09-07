@@ -272,6 +272,7 @@
           <div class="metric"><span>IPv4 address</span><strong id="sIp">—</strong></div>
           <div class="metric"><span>BACnet/IP</span><strong id="sBacnet">—</strong></div>
           <div class="metric"><span>UDP port</span><strong id="sPort">—</strong></div>
+          <div class="metric"><span>UDP receive queue</span><strong id="sUdpMailbox">—</strong></div>
           <div class="metric"><span>Packets received</span><strong id="sPackets">—</strong></div>
         </article>
         <article class="card">
@@ -543,6 +544,7 @@
     $('sIp').textContent = status.ipv4_assigned ? status.ip_address : 'Not assigned';
     $('sBacnet').textContent = boolText(status.bacnet_running, 'Running', 'Stopped');
     $('sPort').textContent = status.bacnet_udp_port;
+    $('sUdpMailbox').textContent = `${status.bacnet_udp_receive_mailbox_size} datagrams`;
     $('sPackets').textContent = Number(status.bacnet_packets_received).toLocaleString();
     $('sInstance').textContent = status.bacnet_device_instance;
     $('sRelayHealth').textContent = boolText(status.relay_controller_healthy, 'Healthy', 'Fault');
