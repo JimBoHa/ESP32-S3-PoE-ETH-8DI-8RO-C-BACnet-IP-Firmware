@@ -51,7 +51,7 @@ Run long-duration health monitoring with the host-side logger described in
 restarts/configuration changes/relay activity/heap-floor violations, and does
 not add periodic writes to ESP32 NVS or flash.
 
-Version 0.13.2 bench validation on 2026-09-05 completed two full 93-check HIL
+Version 0.13.5 bench validation on 2026-09-06 completed two full 94-check HIL
 runs with BACpypes3 0.0.106. The suite covered directed and broadcast
 discovery, the exact 28-object model and metadata, advertised capabilities,
 ReadPropertyMultiple `ALL`, Who-Has by identifier and configured name,
@@ -60,25 +60,29 @@ access cases, priority arbitration, reserved priority 6, and final cleanup.
 Each Binary Output was the only active relay for three seconds and was
 cross-checked against the TCA9554 command mask before relinquishing. A second,
 independent upstream bacnet-stack 1.6.0 client also discovered the controller
-and read Device, DI, BO, and Network Port properties. Ten bursts of 32
-simultaneous directed Who-Is requests returned 320 of 320 I-Am responses after
-the BACnet UDP receive mailbox was increased from 6 to 32 datagrams.
+and read Device, DI, BO, and Network Port properties. Five bursts each at 32
+and 64 simultaneous directed Who-Is requests returned all 480 expected I-Am
+responses. Intentional overload at 128 and 256 requests plateaued at 64-67
+responses without a reboot or state change, consistent with the compiled
+64-datagram mailbox reported by the management API.
 
 The same final-candidate validation cycle covered management API/security
-headers, precise input-validation errors, correct
-HMAC, replay, signature, body-hash, and nonce-expiry behavior; persistent
+headers, precise input-validation errors, correct HMAC, replay, signature,
+body-hash, and nonce-expiry behavior; persistent
 Device/DI/BO names and location across reboot followed by exact restoration;
-DHCP address and MAC stability across repeated warm reboots; 100 ICMP replies
-with no host-interface errors, drops, or collisions; safe relay clearing when
-rebooting with restore disabled; and 2,011 malformed BACnet/IPv4 frames
-followed by 100 successful BACnet probes with bounded heap. Ethernet OTA was
-validated both by a successful upgrade and by rejection of an interrupted
-transfer, a signed incorrect digest, a structurally invalid image, and a
-checksum/hash-valid image with the wrong project identity. A subsequent reboot
+DHCP address, Ethernet MAC, OTA partition, and relay safety across repeated
+warm reboots; 100 ICMP replies with no host-interface errors or collisions;
+relay-state save/restore followed by safe clearing with restore disabled; and
+2,011 malformed BACnet/IPv4 frames followed by 100 successful BACnet probes
+with bounded heap. Ethernet OTA was validated both by the successful v0.13.5
+upgrade and by rejection of missing authentication, an interrupted transfer,
+a signed incorrect digest, a structurally invalid image, and a checksum- and
+SHA-valid ESP32-S3 image with the wrong project identity. A subsequent reboot
 proved that none of the rejected images changed the next boot partition. The
-tested OTA image is 577,840 bytes with SHA-256
-`fab8d1b3308829c60cadfc3b60242d8d5bd76cdb411104d00a9106780631f973`.
-The final relay mask and all priority arrays were zero.
+tested OTA image is 578,160 bytes with SHA-256
+`8816c0e8ed9684b2c87eec7eff1f88deb4b14a23498080dbb5266179d283d75e`.
+The final relay mask and all priority arrays were zero. Host tests, a clean
+ESP-IDF 5.5.4 build, package checksums, and GitHub CI also passed.
 
 An earlier v0.13.0 diagnostic soak completed 806 good samples in approximately
 13.45 hours and observed one directed I-Am timeout while another BACnet client
@@ -86,8 +90,21 @@ was generating an unusually high request rate. The controller did not restart
 or lose HTTP service and immediately passed 300 BACnet and 100 ICMP recovery
 probes. That evidence led to the receive-mailbox correction above. The
 diagnostic run was intentionally stopped after the correction was identified;
-it is not a passing endurance result. A fresh strict v0.13.2 soak remains a
-release gate.
+it is not a passing endurance result.
+
+The strict v0.13.2 soak subsequently ran the full 86,400 seconds and recorded
+1,441 samples: 1,437 complete successes, four request failures, two samples
+with health alerts, and a maximum of two consecutive failures. Two isolated
+I-Am timeouts recovered at the next one-minute sample. Near the final three
+minutes, two more I-Am probes failed and the following status response showed
+a new persistent reboot count, 115 seconds of uptime, and ESP-IDF reset reason
+`power-on`. The monitoring host did not reboot and its interface counters
+remained clean. This is evidence of an external power/reset-path interruption,
+not a firmware software-reset reason, but the run correctly failed the strict
+zero-failure/zero-reboot gate. Separate burst characterization then showed an
+exact 32-response ceiling in v0.13.2 and motivated the supported maximum of 64
+plus the compile-time and runtime capacity checks in v0.13.5. A fresh strict
+v0.13.5 soak remains the endurance release gate.
 
 The DI channels remained inactive because no electrical stimulus or loopback
 fixture was attached. Their BACnet read path and metadata are validated, but
@@ -102,7 +119,7 @@ Remaining field-only release gates:
 - failed-startup OTA rollback and corrupt-NVS fallback with recovery access;
 - discovery and point import from representative ALC, Niagara/Tridium, and
   Metasys clients;
-- complete the documented strict 24-hour v0.13.2 endurance/soak run.
+- complete the documented strict 24-hour v0.13.5 endurance/soak run.
 
 ## Package
 
