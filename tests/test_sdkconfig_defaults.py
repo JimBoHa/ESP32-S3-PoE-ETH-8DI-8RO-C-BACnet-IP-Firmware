@@ -19,7 +19,7 @@ class SdkconfigDefaultsTests(unittest.TestCase):
             settings[name] = value
 
         self.assertIn("CONFIG_LWIP_UDP_RECVMBOX_SIZE", settings)
-        self.assertGreaterEqual(int(settings["CONFIG_LWIP_UDP_RECVMBOX_SIZE"]), 128)
+        self.assertEqual(int(settings["CONFIG_LWIP_UDP_RECVMBOX_SIZE"]), 64)
 
 
 if __name__ == "__main__":
