@@ -5,7 +5,8 @@ portion of commissioning with an independent BACpypes3 client. It tests both
 broadcast and directed discovery, the complete object map and metadata,
 ReadPropertyMultiple `ALL`, Who-Has/I-Have, confirmed and unconfirmed COV,
 the 16-subscription capacity bound and cleanup, and representative negative
-access responses. By default it does not actuate outputs.
+access responses. It also requires the runtime-reported BACnet UDP receive
+mailbox to be at least 64 datagrams. By default it does not actuate outputs.
 
 Create an isolated environment and install the pinned test dependency:
 

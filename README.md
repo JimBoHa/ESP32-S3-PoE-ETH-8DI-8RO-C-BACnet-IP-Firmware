@@ -22,7 +22,8 @@ expander. Verify the exact product label and board revision before flashing.
 ## Features
 
 - BACnet/IP over the onboard W5500, UDP port 47808 by default.
-- A 32-datagram UDP receive mailbox for bursty discovery and point scans.
+- A build-enforced, runtime-visible 64-datagram UDP receive mailbox for
+  bursty discovery and point scans.
 - DHCP by default, with persistent static IPv4 configuration available.
 - Eight debounced, active-low-by-default Binary Input objects.
 - Eight commandable Binary Output objects with BACnet priority arrays.

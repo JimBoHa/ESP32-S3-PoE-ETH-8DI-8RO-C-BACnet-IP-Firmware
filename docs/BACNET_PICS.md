@@ -17,7 +17,7 @@ test report, listing, or certification claim.
 | BACnet/SC | Not implemented |
 | Character set | ANSI X3.4 strings emitted by the stack |
 | COV subscriptions | Up to 16 subscriptions / 8 addresses |
-| UDP receive mailbox | 32 datagrams |
+| UDP receive mailbox | 64 datagrams; compiled capacity is reported by the management status endpoint |
 
 Broadcast discovery works on the local IP subnet. Cross-subnet discovery needs
 an external BACnet router/BBMD design; the device does not register as a Foreign

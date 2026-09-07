@@ -10,6 +10,7 @@ The monitor treats these conditions as failures:
 - a missed or malformed BACnet or HTTP response;
 - an unexpected reboot, firmware/partition/IP/identity change, or configuration
   change;
+- a missing, undersized, or changing compiled BACnet UDP receive mailbox;
 - Ethernet, IPv4, BACnet, TCA9554, or RTC becoming unhealthy;
 - unexpected relay command/output state or active priorities;
 - current or historical free heap below the configured floor;
