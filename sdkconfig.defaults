@@ -21,8 +21,9 @@ CONFIG_LWIP_SO_REUSE=y
 # BACnet clients commonly issue discovery/import requests in bursts. Keep a
 # large multi-client point-scan burst queued while the BACnet task processes
 # earlier NPDUs. Bench testing showed that 32 slots imposed an exact 32-reply
-# ceiling when 64 or more Who-Is requests arrived concurrently.
-CONFIG_LWIP_UDP_RECVMBOX_SIZE=128
+# ceiling when 64 or more Who-Is requests arrived concurrently. ESP-IDF 5.5.4
+# supports at most 64 slots.
+CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
 
 # Mirror boot and application logs to the board's native USB Serial/JTAG port.
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
