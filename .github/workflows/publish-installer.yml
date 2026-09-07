@@ -93,7 +93,8 @@ jobs:
           python tools/collect_installer_releases.py \
             --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG" \
             --candidate-root candidate \
-            --new-asset "new-asset/bacnet-io-$RELEASE_TAG.tar.gz"
+            --new-asset "new-asset/bacnet-io-$RELEASE_TAG.tar.gz" \
+            --new-zip "new-asset/bacnet-io-$RELEASE_TAG.zip"
       - name: Build static installer
         working-directory: installer
         run: npm run build
@@ -101,10 +102,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          asset="new-asset/bacnet-io-$RELEASE_TAG.tar.gz"
-          if [ -f "$asset" ]; then
-            gh release upload "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY"
-          fi
+          for extension in tar.gz zip; do
+            asset="new-asset/bacnet-io-$RELEASE_TAG.$extension"
+            if [ -f "$asset" ]; then
+              gh release upload "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY"
+            fi
+          done
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

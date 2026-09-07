@@ -13,6 +13,7 @@ import re
 import subprocess
 import tarfile
 import tempfile
+import zipfile
 
 try:
     from .prepare_installer import stage, verify_package
@@ -86,12 +87,15 @@ def main() -> None:
     parser.add_argument("--candidate-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("installer/public/firmware"))
     parser.add_argument("--new-asset", type=Path, required=True)
+    parser.add_argument("--new-zip", type=Path, help="create a missing desktop-friendly ZIP from the same verified package")
     args = parser.parse_args()
     stable_version(args.tag)
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", args.repository):
         raise ValueError("Invalid repository")
     if args.new_asset.exists():
         raise ValueError("New-asset output must not exist")
+    if args.new_zip and args.new_zip.exists():
+        raise ValueError("New-ZIP output must not exist")
     pages = json.loads(gh("api", "--paginate", "--slurp",
                           f"repos/{args.repository}/releases?per_page=100"))
     releases = select_releases([r for page in pages for r in page], args.tag)
@@ -114,6 +118,13 @@ def main() -> None:
                 with tarfile.open(args.new_asset, "w:gz") as archive:
                     archive.add(candidate, arcname=tag)
         catalog = stage(directories, args.output, args.tag[1:])
+        if args.new_zip and not any(a["name"] == f"bacnet-io-{args.tag}.zip"
+                                    for a in releases[0].get("assets", [])):
+            args.new_zip.parent.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(args.new_zip, "x", compression=zipfile.ZIP_DEFLATED) as archive:
+                for path in sorted(directories[0].rglob("*")):
+                    if path.is_file():
+                        archive.write(path, Path(args.tag) / path.relative_to(directories[0]))
         print(f"Verified {len(catalog['releases'])} published release(s)")
 
 
