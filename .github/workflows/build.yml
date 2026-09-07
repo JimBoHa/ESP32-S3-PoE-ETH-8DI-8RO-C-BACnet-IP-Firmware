@@ -42,5 +42,45 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: esp32-s3-bacnet-firmware
-          path: release/v*/
+          path: release/
+          if-no-files-found: error
+
+  browser-installer:
+    needs: esp32s3-firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: installer/package-lock.json
+      - uses: actions/download-artifact@v7
+        with:
+          name: esp32-s3-bacnet-firmware
+          path: candidate
+      - name: Stage the tested firmware package
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from tools.prepare_installer import stage, verify_package
+          packages = list(Path('candidate').glob('v*'))
+          if len(packages) != 1:
+              raise SystemExit('Expected one firmware package')
+          version = verify_package(packages[0])['version']
+          stage(packages, Path('installer/public/firmware'), version)
+          PY
+      - name: Test and build installer
+        working-directory: installer
+        run: |
+          npm ci
+          npm test
+          npx playwright install --with-deps chromium
+          npm run test:browser
+          npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: browser-installer-preview
+          path: installer/dist/
           if-no-files-found: error

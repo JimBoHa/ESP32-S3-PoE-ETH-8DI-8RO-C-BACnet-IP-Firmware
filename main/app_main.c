@@ -19,6 +19,7 @@
 #include "config_store.h"
 #include "ethernet_manager.h"
 #include "firmware.h"
+#include "usb_setup.h"
 #include "web_admin.h"
 
 static const char *TAG = "app";
@@ -76,16 +77,6 @@ void app_main(void)
     if ((result = auth_init(admin_key)) != ESP_OK) {
         fatal_startup_error(result, "authentication", pending_verify);
     }
-    if (key_created) {
-        char key_hex[FW_AUTH_KEY_BYTES * 2U + 1U];
-        auth_hex_encode(admin_key, sizeof(admin_key), key_hex);
-        ESP_LOGW(TAG, "============================================================");
-        ESP_LOGW(TAG, "FIRST-BOOT ADMIN KEY (capture now; it is not shown again):");
-        ESP_LOGW(TAG, "%s", key_hex);
-        ESP_LOGW(TAG, "Store it in the commissioning machine's protected key file.");
-        ESP_LOGW(TAG, "============================================================");
-        mbedtls_platform_zeroize(key_hex, sizeof(key_hex));
-    }
     mbedtls_platform_zeroize(admin_key, sizeof(admin_key));
 
     firmware_config_t config;
@@ -113,6 +104,9 @@ void app_main(void)
     }
     if ((result = web_admin_start()) != ESP_OK) {
         fatal_startup_error(result, "management service", pending_verify);
+    }
+    if ((result = usb_setup_start(key_created)) != ESP_OK) {
+        fatal_startup_error(result, "USB setup", pending_verify);
     }
 
     /* Core self-test passed: NVS, TCA9554, W5500 driver, BACnet task, and

@@ -27,6 +27,12 @@ as `bacnet_udp_receive_mailbox_size`.
 
 ## Tests
 
+The [browser installer guide](BROWSER_INSTALLER.md#local-development-and-tests)
+documents browser tests and the release-to-Pages workflow. Browser changes
+require the Node tests, Chromium interaction tests, and a production build;
+USB transport changes also require a physical-controller check. A mock device
+fixture cannot prove Web Serial timing, flash contents, or USB reboot behavior.
+
 ```sh
 tests/run_host_tests.sh
 idf.py fullclean
@@ -40,6 +46,28 @@ URL, key, OTA descriptor, canonical request, HMAC, and relay command behavior;
 and static integrity of the embedded management interface. The IDF build
 compiles the real ESP32-S3 application, embedded page, and selected
 bacnet-stack sources.
+
+Version 0.14.0 browser-installer validation on 2026-09-07 used the physical
+ESP32-S3-POE-ETH-8DI-8RO-C and Chrome for Testing 153.0.8010.12 on macOS.
+The production preview completed a full 16,777,216-byte USB backup with
+per-chunk and whole-flash MD5 verification, then erased and installed the
+SHA-256-checked release image through the browser. Flash verification,
+first-boot USB status, Ethernet discovery, private key download, and explicit
+key-export locking passed. Reconnecting detected the running firmware without
+another reset and rejected a key request after locking.
+
+The downloaded key loaded through the embedded management page and signed a
+successful Ethernet OTA upload of the 587,152-byte application. The controller
+booted the other OTA slot; the same key then authorized a reboot. Directed
+BACnet discovery and 26 read-only property checks passed after USB installation
+and again after OTA. All eight inputs and relay commands were inactive; RTC,
+relay-controller, Ethernet, and BACnet health checks passed. Private backups,
+keys, and site-specific reports are retained outside the repository.
+
+This validates the installation workflow, not the full hardware acceptance or
+endurance suite below. Physical BOOT-button key recovery, Windows/Edge USB
+behavior, and public GitHub Pages deployment remain separate checks. Automated
+tests cover the BOOT hold duration, export expiry, and lock policy.
 
 The repeatable live BACnet suite and its explicit relay safety gate are
 documented in [Hardware acceptance testing](HARDWARE_TESTING.md). Its JSON

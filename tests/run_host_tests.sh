@@ -12,5 +12,12 @@ cc -std=c11 -Wall -Wextra -Werror \
     -o "$test_tmp/test_config_model"
 "$test_tmp/test_config_model"
 
+cc -std=c11 -Wall -Wextra -Werror \
+    -I"$repo_root/main" \
+    "$repo_root/main/usb_setup_model.c" \
+    "$repo_root/tests/test_usb_setup_model.c" \
+    -o "$test_tmp/test_usb_setup_model"
+"$test_tmp/test_usb_setup_model"
+
 cd "$repo_root"
 python3 -m unittest discover -s tests -p 'test_*.py'

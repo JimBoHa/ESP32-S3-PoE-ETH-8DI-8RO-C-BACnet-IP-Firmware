@@ -8,6 +8,8 @@ idf_component_register(
         "config_model.c"
         "config_store.c"
         "ethernet_manager.c"
+        "usb_setup.c"
+        "usb_setup_model.c"
         "web_admin.c"
     INCLUDE_DIRS "."
     REQUIRES
@@ -17,6 +19,7 @@ idf_component_register(
         esp_driver_gpio
         esp_driver_i2c
         esp_driver_spi
+        esp_driver_usb_serial_jtag
         esp_eth
         esp_event
         esp_http_server

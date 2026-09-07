@@ -12,8 +12,9 @@ the public Internet. This firmware does not implement BACnet/SC.
 
 ## Management authentication
 
-First boot generates a random 256-bit admin key, stores it in NVS, and prints it
-once to the USB console. Mutation requests use a 60-second, one-use random nonce
+First boot generates a random 256-bit admin key and stores it in NVS. Native
+USB setup permits downloading it for five minutes during that first boot.
+It is not printed in ordinary logs. Mutation requests use a 60-second, one-use random nonce
 and HMAC-SHA256 over:
 
 ```text
@@ -48,8 +49,30 @@ that is not fully trusted.
 
 The API intentionally has no network key-recovery or key-rotation endpoint:
 plain HTTP cannot confidentially transport a replacement key. If the key is
-lost or suspected compromised, perform a controlled USB reflash/flash erase
-and recommission the device.
+lost, firmware 0.14.0 and newer allow recovery over physical USB after a
+three-second BOOT-button hold. If suspected compromised, perform a controlled
+USB flash erase and recommission the device to generate a replacement.
+
+## Physical USB setup
+
+Only the native USB Serial/JTAG interface accepts `BACNET-USB/1` setup requests.
+The initial five-minute export window applies only when a key was newly
+generated during that boot. Existing keys start locked after reboot or OTA.
+Holding GPIO0/BOOT low for three seconds while the application runs opens a
+60-second window. Release and press again for another window; continuously
+holding BOOT does not keep renewing it. `LOCK` closes the window immediately.
+
+The installer keeps key material in transient memory and offers a local file
+download. It has no analytics, raw serial log display, HTTP key endpoint, or
+browser-storage key cache. Downloaded key files and complete flash backups
+contain credentials and must be protected. Finishing setup closes export;
+closing the browser alone does not shorten the firmware's timeout.
+
+The HTTPS installer and its published release catalog are trusted code. A
+checksum detects damaged/mismatched downloads but does not authenticate a
+maliciously replaced site. Protect repository/release access. A USB browser
+permission alone is not authorization to change a running device's key.
+Recovery exports the existing key only; it never rotates it.
 
 ## OTA controls
 
@@ -63,7 +86,7 @@ An Ethernet update must pass all of these checks:
 6. boot partition update succeeds.
 
 The new slot is pending until NVS, relay expander, W5500 driver, BACnet task,
-and management server initialize. Failure invokes ESP-IDF rollback. Link and
+management server, and native USB setup initialize. Failure invokes ESP-IDF rollback. Link and
 DHCP are not self-test requirements because a cable or DHCP server may be
 temporarily absent.
 

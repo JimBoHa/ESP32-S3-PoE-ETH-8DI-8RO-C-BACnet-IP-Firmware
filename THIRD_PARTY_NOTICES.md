@@ -29,6 +29,19 @@ copies the ESP-IDF framework license and the relevant FreeRTOS, lwIP, mbedTLS,
 cJSON, http-parser, and C-library license texts into `licenses/`. See the
 ESP-IDF source tree and per-component SPDX metadata for exact terms.
 
+## Browser installer
+
+The browser installer bundles [esptool-js 0.6.1](https://github.com/espressif/esptool-js)
+(Apache-2.0), [pako](https://github.com/nodeca/pako) (MIT and Zlib), and
+[spark-md5 3.0.2](https://github.com/satazor/js-spark-md5) (MIT option).
+`npm run build` copies their license texts into the site's `licenses.txt`.
+Package versions and integrity hashes are pinned in `installer/package-lock.json`.
+
+`installer/public/board-reference.jpg` is a Waveshare product photograph used
+to identify the supported hardware. Copyright remains with Waveshare; this
+image is excluded from the project's Apache-2.0 license.
+Source: <https://www.waveshare.com/img/devkit/accBoard/ESP32-S3-ETH-8DI-8RO-C/ESP32-S3-ETH-8DI-8RO-C-details-2-2.jpg>.
+
 ## Standards and marks
 
 BACnet is a registered trademark of ASHRAE. Use of the protocol name does not
