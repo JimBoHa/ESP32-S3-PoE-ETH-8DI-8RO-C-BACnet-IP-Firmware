@@ -30,6 +30,7 @@ def healthy_status() -> dict[str, object]:
         "bacnet_device_instance": 599153,
         "bacnet_vendor_id": 260,
         "bacnet_udp_port": 47808,
+        "bacnet_udp_receive_mailbox_size": 64,
         "ethernet_link": True,
         "ipv4_assigned": True,
         "bacnet_running": True,
@@ -116,6 +117,12 @@ class SoakMonitorTests(unittest.TestCase):
         )
         self.assertEqual(alerts, [])
 
+    def test_baseline_rejects_undersized_udp_receive_mailbox(self) -> None:
+        status = healthy_status()
+        status["bacnet_udp_receive_mailbox_size"] = 63
+        with self.assertRaisesRegex(soak_monitor.SoakError, "below the release minimum"):
+            soak_monitor.Baseline.from_values(status, healthy_config())
+
     def test_reboot_relay_heap_and_config_changes_alert(self) -> None:
         status = healthy_status()
         config = healthy_config()
@@ -128,6 +135,7 @@ class SoakMonitorTests(unittest.TestCase):
                 "relay_outputs_mask": 1,
                 "relay_commands_mask": 1,
                 "relay_active_priorities": [8] + [0] * 7,
+                "bacnet_udp_receive_mailbox_size": 65,
                 "free_heap_bytes": 190000,
                 "minimum_free_heap_bytes": 180000,
             }
@@ -150,6 +158,7 @@ class SoakMonitorTests(unittest.TestCase):
             "configuration-content-changed",
             "relay-outputs-mask",
             "relay-priorities-active",
+            "bacnet_udp_receive_mailbox_size-changed",
             "free-heap-below-floor",
             "uptime_seconds-decreased",
         ):

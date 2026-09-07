@@ -26,6 +26,7 @@ BACNET_PORT = 47808
 WHO_IS_UNICAST = bytes.fromhex("81 0a 00 08 01 00 10 08")
 MAX_HTTP_RESPONSE_SIZE = 1024 * 1024
 RELAY_COUNT = 8
+MINIMUM_BACNET_UDP_RECEIVE_MAILBOX_SIZE = 64
 DIRECT_OPENER = build_opener(ProxyHandler({}))
 
 
@@ -203,6 +204,7 @@ class Baseline:
     device_instance: int
     vendor_id: int
     bacnet_port: int
+    bacnet_udp_receive_mailbox_size: int
     config_database_revision: int
     config_sha256: str
 
@@ -222,6 +224,7 @@ class Baseline:
             "bacnet_device_instance",
             "bacnet_vendor_id",
             "bacnet_udp_port",
+            "bacnet_udp_receive_mailbox_size",
         )
         missing = [key for key in required_status if key not in status]
         if missing:
@@ -243,6 +246,12 @@ class Baseline:
             raise SoakError("HTTP status and configuration vendor identifiers disagree")
         if int(config["bacnet_port"]) != int(status["bacnet_udp_port"]):
             raise SoakError("HTTP status and configuration BACnet ports disagree")
+        mailbox_size = int(status["bacnet_udp_receive_mailbox_size"])
+        if mailbox_size < MINIMUM_BACNET_UDP_RECEIVE_MAILBOX_SIZE:
+            raise SoakError(
+                "BACnet UDP receive mailbox is below the release minimum "
+                f"({mailbox_size} < {MINIMUM_BACNET_UDP_RECEIVE_MAILBOX_SIZE})"
+            )
         return cls(
             firmware_version=str(status["firmware_version"]),
             build_date=str(status["build_date"]),
@@ -255,6 +264,7 @@ class Baseline:
             device_instance=int(status["bacnet_device_instance"]),
             vendor_id=int(status["bacnet_vendor_id"]),
             bacnet_port=int(status["bacnet_udp_port"]),
+            bacnet_udp_receive_mailbox_size=mailbox_size,
             config_database_revision=int(config["database_revision"]),
             config_sha256=config_fingerprint(config),
         )
@@ -284,6 +294,7 @@ def evaluate_sample(
         "bacnet_device_instance": baseline.device_instance,
         "bacnet_vendor_id": baseline.vendor_id,
         "bacnet_udp_port": baseline.bacnet_port,
+        "bacnet_udp_receive_mailbox_size": baseline.bacnet_udp_receive_mailbox_size,
     }
     for key, expected in stable_fields.items():
         if status.get(key) != expected:
