@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: 0BSD
 export const PREFIX = "BACNET-USB/1 ";
 
 export class SetupClient {

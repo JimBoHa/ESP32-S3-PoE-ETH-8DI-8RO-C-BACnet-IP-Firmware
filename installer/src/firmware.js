@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: 0BSD
 export const PROJECT = "esp32_s3_poe_eth_8di_8ro_bacnet";
 export const FLASH_BYTES = 16 * 1024 * 1024;
 export const MODEL = "ESP32-S3-POE-ETH-8DI-8RO-C";

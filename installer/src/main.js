@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: 0BSD
 import { Controller } from "./device.js";
 import { MODEL, assetURL, validateCatalog, verifyImage, deviceURL, sha256 } from "./firmware.js";
 

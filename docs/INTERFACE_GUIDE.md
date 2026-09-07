@@ -4,7 +4,7 @@ The controller serves its management interface at the Ethernet address shown
 by the USB installer. Open that address from the same reachable automation
 network. No desktop application is needed for routine monitoring or updates.
 
-The screenshots below show firmware 0.14.0's actual interface with example
+The screenshots below show firmware 1.0.0's actual interface with example
 data. The address, names, input states, and relay commands are illustrative;
 no live controller or real key was used to create these images.
 
