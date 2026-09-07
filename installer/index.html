@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Install BACnet/IP firmware on your Waveshare 8-input, 8-relay controller from your browser. Save your admin key and open device setup." />
+    <meta name="referrer" content="no-referrer" />
+    <title>BACnet IO · USB installer</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="BACnet IO installer"><span class="brand-icon" aria-hidden="true">8</span> BACnet IO <span class="brand-caption">USB installer</span></a>
+      <a href="https://github.com/JimBoHa/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware" target="_blank" rel="noopener noreferrer">Project &amp; releases <span aria-hidden="true">↗</span></a>
+    </header>
+    <main>
+      <div class="page-title"><p class="eyebrow">WAVESHARE · 8 INPUTS / 8 RELAYS</p><h1>Install. Connect. Commission.</h1><p>Set up your controller over USB. No command line required.</p></div>
+      <ol class="steps" aria-label="Setup progress">
+        <li id="step-connect" aria-current="step"><span>1</span> Connect USB</li>
+        <li id="step-install"><span>2</span> Install firmware</li>
+        <li id="step-key"><span>3</span> Save admin key</li>
+        <li id="step-network"><span>4</span> Open device</li>
+      </ol>
+      <div class="layout">
+        <section class="panel workspace" aria-labelledby="workspace-title">
+          <div class="panel-heading"><div><p class="eyebrow" id="phase-label">GET STARTED</p><h2 id="workspace-title">Connect your controller</h2></div><span class="pill" id="connection-state">Not connected</span></div>
+          <div id="unsupported" class="notice warning" hidden>This browser cannot access USB serial devices. Open this page in desktop Chrome or Edge using HTTPS, or localhost for development.</div>
+          <p id="intro">Use a USB-C <strong>data cable</strong>. Select “USB JTAG/serial debug unit” in the browser’s device picker.</p>
+          <div class="actions"><button id="connect" class="primary">Connect controller</button><button id="disconnect" class="quiet" hidden>Disconnect</button></div>
+          <p id="device-identity" class="metadata" hidden></p>
+          <div id="message" class="notice" role="status" aria-live="polite" hidden></div>
+          <div id="progress-region" class="progress-region" hidden><div class="progress-caption"><span id="progress-label">Preparing</span><span id="progress-percent"></span></div><progress id="progress" max="1" value="0" aria-label="Installation progress"></progress><p class="metadata">Keep USB connected and this tab open until the operation finishes.</p></div>
+
+          <section id="install-options" class="subsection" aria-labelledby="install-title" hidden>
+            <div class="section-heading"><h3 id="install-title">Install firmware</h3><span class="small-label">INITIAL INSTALLATION / RECOVERY</span></div>
+            <p id="existing-firmware" class="notice subtle" hidden></p>
+            <label class="field-label" for="version">Firmware version</label>
+            <select id="version" disabled><option>Loading approved releases…</option></select>
+            <label class="check"><input id="board-confirm" type="checkbox" /><span>My controller is the <strong>ESP32-S3-POE-ETH-8DI-8RO-C</strong> shown here.</span></label>
+            <div class="backup-row"><div><strong>Keep a recovery copy</strong><p>Optional full backup of the firmware and settings currently on this controller. Allow several minutes.</p></div><button id="backup" class="secondary" disabled>Download backup</button></div>
+            <p class="notice warning">Installation replaces the current firmware and erases saved settings, including the admin key. Disconnect controlled relay loads before installing.</p>
+            <label class="check"><input id="erase-confirm" type="checkbox" /><span>I understand that this installation erases the controller’s current settings.</span></label>
+            <button id="install" class="primary" disabled>Erase &amp; install firmware</button>
+          </section>
+
+          <section id="setup-options" class="subsection" aria-labelledby="setup-title" hidden>
+            <div class="section-heading"><h3 id="setup-title">Save your admin key</h3><span id="key-state" class="small-label">REQUIRED FOR MANAGEMENT</span></div>
+            <p>This private key lets you configure the device, control relays, and update firmware. Keep the downloaded file somewhere safe.</p>
+            <p id="unlock-help" class="notice subtle" hidden>While the controller is running, hold <strong>BOOT for 3 seconds</strong>, then release it. Do not press RESET. This allows key download for 60 seconds.</p>
+            <div class="actions"><button id="download-key" class="secondary">Download admin key</button><button id="finish" class="quiet" disabled>Finish USB setup</button></div>
+            <p class="metadata">The key stays on your computer. This installer does not upload it, add it to device links, or save it in browser storage.</p>
+            <div class="network-card"><span class="status-dot" id="network-dot"></span><div><h3 id="network-title">Connect Ethernet</h3><p id="network-detail">Connect Ethernet to a network with DHCP. Your device address will appear here.</p><a id="open-device" class="button primary" target="_blank" rel="noopener noreferrer" hidden>Open device</a></div></div>
+            <p id="health-warning" class="notice warning" hidden>Firmware is running, but a hardware check needs attention. Inspect the device health below before commissioning.</p>
+            <dl id="health" class="health" hidden><div><dt>Firmware</dt><dd id="health-version"></dd></div><div><dt>Relay controller</dt><dd id="health-relays"></dd></div><div><dt>RTC</dt><dd id="health-rtc"></dd></div><div><dt>BACnet device</dt><dd id="health-instance"></dd></div></dl>
+          </section>
+        </section>
+
+        <aside>
+          <section class="panel board-card" aria-labelledby="board-title"><p class="eyebrow">CHECK YOUR BOARD LABEL</p><h2 id="board-title">The PoE + CAN model</h2><img src="./board-reference.jpg" alt="Waveshare ESP32-S3-POE-ETH-8DI-8RO-C controller showing its product label" width="600" height="400" /><p class="model-label">ESP32-S3-POE-ETH-8DI-8RO-C</p><p>16 MB flash · 8 MB PSRAM<br />8 digital inputs · 8 relay outputs</p><p class="metadata">Chip detection cannot identify every board variant. Match the full product label, including <strong>POE</strong> and <strong>-C</strong>.</p><a href="https://www.waveshare.com/esp32-s3-eth-8di-8ro-c.htm" target="_blank" rel="noopener noreferrer">Waveshare hardware reference ↗</a></section>
+          <section class="panel help-card" aria-labelledby="help-title"><h2 id="help-title">Connection help</h2><details><summary>Device does not appear</summary><p>Use a data-capable USB-C cable and another USB port. Close serial monitors or other tabs using this device. Select “USB JTAG/serial debug unit” when prompted.</p></details><details><summary>Cannot enter flashing mode</summary><p>Keep USB connected. Hold <strong>BOOT</strong>, tap <strong>RESET</strong>, then release <strong>BOOT</strong>. Try connecting again. If macOS shows an accessory prompt, allow the connection.</p><div class="button-guide" aria-label="Hold BOOT, tap RESET, release BOOT"><span>Hold<br /><b>BOOT</b></span><span>Tap<br /><b>RESET</b></span><span>Release<br /><b>BOOT</b></span></div></details><details><summary>Firmware installed, setup interrupted</summary><p>Reconnect here to continue setup. You do not need to erase the device again. If key download is locked, hold BOOT for 3 seconds while the firmware is running.</p></details><details><summary>Future firmware updates</summary><p>Open your device’s web interface and use its <strong>Firmware</strong> tab with the admin key. Ethernet updates preserve settings. Use USB installation for initial setup or intentional recovery.</p><a id="download-ota" hidden>Download Ethernet update</a></details></section>
+        </aside>
+      </div>
+      <footer>Runs locally in your browser · No account required · <a href="https://github.com/JimBoHa/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware/issues" target="_blank" rel="noopener noreferrer">Report a problem</a> · <a href="./licenses.txt">Licenses & image credit</a></footer>
+    </main>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

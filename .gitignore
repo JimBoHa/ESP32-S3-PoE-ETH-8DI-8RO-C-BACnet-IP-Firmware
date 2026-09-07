@@ -16,3 +16,11 @@ __pycache__/
 *.key
 *.secret
 /release/
+
+# Browser installer build, dependencies, and local browser test output
+/installer/node_modules/
+/installer/dist/
+/installer/public/licenses.txt
+/installer/public/firmware/
+/installer/test-results/
+/installer/playwright-report/
