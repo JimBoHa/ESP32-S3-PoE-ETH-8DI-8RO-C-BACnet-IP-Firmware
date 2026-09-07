@@ -12,7 +12,7 @@ function stub(bytes, packets) {
     async checkCommand(_name, command, payload) {
       assert.equal(command, 0xd2);
       const view = new DataView(payload.buffer);
-      assert.deepEqual([0, 4, 8, 12].map((i) => view.getUint32(i, true)), [0, bytes.length, 4096, 4]);
+      assert.deepEqual([0, 4, 8, 12].map((i) => view.getUint32(i, true)), [0, bytes.length, 4096, 1]);
       return 0;
     },
     transport: {
@@ -22,7 +22,7 @@ function stub(bytes, packets) {
   };
 }
 
-test("full backup acknowledges bounded blocks and consumes/verifies final digest", async () => {
+test("full backup allows one unacknowledged block and consumes/verifies final digest", async () => {
   const bytes = Uint8Array.from({ length: 6000 }, (_, i) => i % 256);
   const loader = stub(bytes);
   const progress = [];

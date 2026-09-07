@@ -35,7 +35,7 @@ class WebUiTests(unittest.TestCase):
     def test_page_is_self_contained_and_bounded(self) -> None:
         self.assertLess(len(self.page.encode("utf-8")), 96 * 1024)
         self.assertNotRegex(self.page, r'<(?:script|link)[^>]+(?:src|href)="https?://')
-        self.assertIn("SPDX-License-Identifier: Apache-2.0", self.page)
+        self.assertIn("SPDX-License-Identifier: 0BSD", self.page)
 
     def test_static_element_ids_are_unique(self) -> None:
         parser = IdCollector()

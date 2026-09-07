@@ -1,0 +1,19 @@
+{
+  "source": "Windows 11 ARM64 VM; native Windows Chrome dialog, captured directly from dialog bounds after selecting the real USB device. No image retouching.",
+  "chrome_version": "152.0.7977.83",
+  "files": [
+    {
+      "file": "windows-chrome-usb-picker.png",
+      "sha256": "7f30552a6e9685c185c1ae4d4ba35f2aacce5ff2d10a18a40b075a0f51d1354d",
+      "png_chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "pHYs",
+        "IDAT",
+        "IEND"
+      ]
+    }
+  ],
+  "privacy": "Only native dialog. No desktop, username, personal files, controller address, MAC, or key contents. Loopback origin is the local test installer; COM number is assigned by Windows."
+}

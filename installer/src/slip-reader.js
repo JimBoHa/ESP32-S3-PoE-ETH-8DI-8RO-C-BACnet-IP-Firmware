@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: 0BSD
 // Linear-time SLIP decoding for esptool-js 0.6.1's Transport buffer. Upstream
 // appends a new Uint8Array for every byte; full-flash backups magnify that cost.
 // The pinned Transport continues to own the Web Serial reader and disconnect.

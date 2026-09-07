@@ -1,12 +1,31 @@
-# Browser installation and release publishing
+# Flash your controller: illustrated beginner guide
+
+**[Open the firmware installer](https://JimBoHa.github.io/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware/)**
+
+You can install firmware 1.0.0 using buttons in Chrome or Edge. No programming
+or command line is needed. Allow about 10–15 minutes, including an optional
+backup. Keep this guide open in a second tab while you work.
+
+**Already running this firmware?** Use the device’s **Firmware** tab for an
+update that keeps settings. The USB installation below erases them.
+
+[Start installation](#first-installation-with-screenshots) ·
+[Fix connection problems](#connection-help) ·
+[Recover a lost key](#recover-a-key-without-erasing-settings) ·
+[Update over Ethernet](#later-firmware-updates)
 
 ## What you need
 
 - The **ESP32-S3-POE-ETH-8DI-8RO-C**, with 16 MB flash and 8 MB PSRAM.
 - A desktop computer running Chrome or Edge with Web Serial support. Safari,
   Firefox, and mobile browsers are not supported for USB flashing.
-- A USB-C **data** cable. Connect Ethernet to a network with DHCP; PoE can keep
-  the device powered after USB setup finishes.
+- A USB-C **data** cable. A charging-only cable will power the board but will
+  not let your browser find it.
+- An Ethernet cable connected to your router or network switch. The network
+  should assign addresses automatically (DHCP).
+- Power after installation: a compatible PoE network connection or the
+  external supply specified for this board. Without another supply, leave USB
+  connected to keep the controller powered.
 
 ![Supported Waveshare PoE + CAN controller](../installer/public/board-reference.jpg)
 
@@ -36,16 +55,29 @@ Browser support alone does not prove every USB cable, driver, or VM works.
 These screenshots are rendered from the actual application with isolated
 example data. `192.0.2.140`, the example device identity, and sample I/O states
 are not your controller's address or live readings. The native device picker
-and file chooser vary with operating system and browser.
+and file chooser vary with operating system and browser. Orange outlines,
+numbered labels, and arrows show what to click. Click an image to enlarge it.
+These annotations are added to the real page before its screenshot is taken.
 
 ### 1. Connect the controller
 
 Disconnect controlled relay loads. Connect USB-C and open the
 [USB installer](https://JimBoHa.github.io/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware/).
 Click **Connect controller**, select **USB JTAG/serial debug unit** (or the
-corresponding USB serial/COM device), and approve the serial connection.
+corresponding USB serial/COM device). Click that device row first, then click
+**Connect** in the small browser dialog. A number such as **COM3** is normal
+on Windows; yours may differ. If you click **Cancel**, nothing changes; choose
+**Connect controller** again when ready.
+
+**You should see:** **Controller connected** and a green **USB connected** badge.
 
 ![Step 1: connect the exact Waveshare controller](images/install-01-connect.png)
+
+**Windows device picker:** click the controller row, then the blue **Connect**
+button. The address at the top is the installer site you opened; this native
+Windows screenshot uses the local test installer. Your COM number may differ.
+
+![Windows Chrome: controller selected and Connect button enabled](images/windows-chrome-usb-picker.png)
 
 ### 2. Confirm the board, back up, and select a release
 
@@ -56,7 +88,12 @@ contain private keys; keep it private.
 
 Select the recommended firmware. Read the erase notice and tick its checkbox
 when ready. Installation replaces firmware and erases saved settings,
-including the admin key.
+including the admin key. Leave **Recommended** selected unless you have a
+specific reason to install another version. The **Erase & install firmware**
+button stays unavailable until both confirmation boxes are ticked.
+
+**You should have:** the exact board confirmed, a finished backup if you
+requested one, and the erase box ticked.
 
 ![Step 2: board confirmation, optional backup, version, and erase acknowledgement](images/install-02-confirm.png)
 
@@ -65,14 +102,21 @@ including the admin key.
 Click **Erase & install firmware**. Keep USB connected and the tab open.
 The installer checks the download's SHA-256, erases flash, writes the merged
 image, verifies flash with MD5, and checks the running project's identity and
-version. Wait for **Firmware installed** before continuing.
+version. Wait for **Firmware installed** before continuing. Progress may pause
+while flash is erased or the controller restarts. Do not refresh the page,
+close the tab, or unplug USB while it is working.
+
+**You should see:** **Firmware installed** and **WRITE & BOOT VERIFIED**.
 
 ![Step 3: firmware writing progress; leave USB connected](images/install-03-writing.png)
 
 ### 4. Save the new admin key and find the Ethernet address
 
 Click **Download admin key**. Confirm that the `.key` file is saved in Downloads
-and keep a private recovery copy. Do not post it in GitHub issues or screenshots.
+and keep a private recovery copy. If the browser asks where to save it,
+choose **Downloads**, then **Save**. The name begins with `bacnet-io-` and ends
+with `-admin.key`. Do not open or edit its contents. Treat it like a password;
+never post it in GitHub issues or screenshots.
 Connect Ethernet to a network with DHCP. The installer shows the actual device
 address when available, plus relay-controller and RTC health.
 For immediate management access, wait for **Ethernet connected** and the
@@ -84,17 +128,27 @@ For immediate management access, wait for **Ethernet connected** and the
 
 Once the key file is saved, click **Finish USB setup**. This locks key export
 and releases the serial port. **USB setup complete** confirms this step.
-Keep PoE or suitable external power connected when unplugging USB.
+Keep PoE or suitable external power connected when unplugging USB. The
+**Finish USB setup** button becomes available after you download the key.
+
+![Click Finish USB setup after saving the private key](images/install-07-finish.png)
 
 ![Step 5: setup complete, key export locked, and Ethernet handoff](images/install-05-complete.png)
 
 ### 6. Open the device and load the key
 
 Click **Open device**. On its **Relay Control** tab, choose **Load key file**
-and select the downloaded `.key` file. Leave the key masked. The file is read
+and select the downloaded `.key` file from **Downloads**. Click **Open** in
+the file dialog. Do not select a `.bin` backup or a firmware image here.
+Leave the key masked. The file is read
 locally; only signed management requests leave the browser.
 
 ![Step 6: load the downloaded key file locally](images/install-06-load-key.png)
+
+**You should see:** a green connection indicator, version **1.0.0**, and
+**Admin key loaded locally**. The key box shows dots. Bookmark this device
+page; use the actual address shown on your screen, not the example address
+in the screenshots. Reloading the page means loading the key file again.
 
 Use [the interface tour](INTERFACE_GUIDE.md) for relay control, status,
 configuration, and later Ethernet updates.
@@ -140,24 +194,43 @@ That restores the old firmware, settings, and key together.
 
 ## Later firmware updates
 
-Download **Ethernet update** from the installer or `firmware-ota.bin` from a
-GitHub release. Load the saved admin key on **Relay Control**, then open the
-device's **Firmware** tab, choose the app-only image, and upload. Settings and key are preserved. Never
-upload `initial-flash.bin` or a full backup through Ethernet OTA.
-After the device returns online, refresh its management page and load the key
-file again before issuing more commands.
+Use Ethernet updates to keep the controller’s settings and admin key.
+USB reinstallation erases both.
 
-![Ethernet firmware update from the device interface](images/firmware-update.png)
+1. Open the device’s bookmarked web page. On **Relay Control**, use **Load key
+   file** to load its saved `.key` file.
+2. Open the [latest release](https://github.com/JimBoHa/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware/releases/latest).
+   Download the **`.zip` firmware package** under **Assets**. In Windows,
+   right-click it and choose **Extract All**; on Mac, double-click it.
+   Inside the extracted folder, find **firmware-ota.bin**.
+3. Return to the device and click its **Firmware** tab. Under **OTA application
+   image**, click **Choose File** (some browsers say **Browse**). Select
+   **firmware-ota.bin** and click **Open**.
+
+![Select the app-only Ethernet update image](images/update-01-select.png)
+
+4. Check the version shown below the file selector. Click **Verify and upload**,
+   then approve the browser’s update confirmation. Keep power and Ethernet
+   connected while the controller restarts.
+
+![Check the selected version, then verify and upload](images/update-02-verify.png)
+
+5. Wait for the green connection indicator to return. Refresh the device page
+   if needed. Check the new version on **BACnet & Status** and load the same
+   key file again before making further changes.
+
+Use **firmware-ota.bin** for this step. **initial-flash.bin** and full recovery
+backups belong to USB flashing and cannot be uploaded through Ethernet.
 
 ## Maintainer: publish without a command line
 
-After merging this feature:
+To publish a new tested version:
 
 1. Open repository **Settings → Pages**. Set **Build and deployment → Source**
    to **GitHub Actions**. Ensure the `github-pages` environment permits your
    stable release tags (for example `v*`), not only `main`.
 2. Open **Releases → Draft a new release**. Choose the tested commit and a tag
-   matching `PROJECT_VER`, starting with **v0.14.0**. Keep draft/prerelease
+   matching `PROJECT_VER`, such as **v1.0.0**. Keep draft/prerelease
    builds unpublished until approved. Publish a stable release to promote it.
 3. Watch **Actions → Publish browser installer**. It builds the tagged
    firmware with ESP-IDF 5.5.4, runs host/browser tests, verifies packages,
@@ -183,7 +256,7 @@ Build firmware using the repository's ESP-IDF instructions, then:
 
 ```sh
 python tools/package_release.py
-python tools/prepare_installer.py --release-dir release/v0.14.0 --recommended 0.14.0
+python tools/prepare_installer.py --release-dir release/v1.0.0 --recommended 1.0.0
 cd installer
 npm ci
 npm test
@@ -215,7 +288,7 @@ The browser uses [Espressif esptool-js](https://github.com/espressif/esptool-js)
 for ROM discovery, stub loading, erase, flash, and verification. Version 0.6.1
 is pinned. The adapter uses a bounded, linear-time SLIP packet decoder,
 supplies an actual RTS reset pulse, and implements the
-documented stub backup read with at most four unacknowledged blocks. Backups
+documented stub backup read with at most one unacknowledged block. Backups
 use 256 KiB chunks, bounded retries, per-chunk MD5, and a final whole-flash MD5
 check; damaged or inconsistent snapshots are never downloaded. The upstream
 bulk-read default lost data on native USB during bench testing.

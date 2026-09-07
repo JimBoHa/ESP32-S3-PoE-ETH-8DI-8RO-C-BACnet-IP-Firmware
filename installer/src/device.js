@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: 0BSD
 import { ESPLoader, Transport } from "esptool-js";
 import SparkMD5 from "spark-md5";
 import { FLASH_BYTES, validateStatus } from "./firmware.js";

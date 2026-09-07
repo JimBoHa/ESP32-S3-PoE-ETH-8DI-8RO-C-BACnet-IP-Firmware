@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: 0BSD
 import SparkMD5 from "spark-md5";
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -22,20 +22,20 @@ export class UsbHardReset {
 }
 
 // esptool-js 0.6.1 readFlash requests 1024 in-flight blocks and leaves the
-// stub's final digest unread. A bounded window prevents native USB
+// stub's final digest unread. A single-block window limits native USB
 // overruns; preallocation avoids repeatedly copying a growing 16 MB array.
 // Protocol: https://docs.espressif.com/projects/esptool/en/latest/esp32s3/advanced-topics/serial-protocol.html
 export async function readFlashRegion(loader, offset, size, onProgress = () => {}) {
   const blockSize = 4096;
   const result = await loader.checkCommand("read flash", loader.ESP_READ_FLASH,
-    words(offset, size, blockSize, 4));
+    words(offset, size, blockSize, 1));
   if (result !== 0) throw new Error("Controller could not start the recovery backup. Nothing was erased.");
   const bytes = new Uint8Array(size);
   let received = 0;
   while (received < size) {
     const packet = await loader.transport.read(10000);
     if (packet.length !== Math.min(blockSize, size - received)) {
-      throw new Error("Backup received an incomplete USB packet.");
+      throw new Error(`Backup received an incomplete USB packet (${packet.length} of ${Math.min(blockSize, size - received)} bytes).`);
     }
     bytes.set(packet, received);
     received += packet.length;

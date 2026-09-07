@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: 0BSD */
 #include "bip_esp32.h"
 
 #include <errno.h>

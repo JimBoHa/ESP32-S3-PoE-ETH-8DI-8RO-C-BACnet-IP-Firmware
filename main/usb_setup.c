@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: 0BSD */
 #include "usb_setup.h"
 #include "usb_setup_model.h"
 

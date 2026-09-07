@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: 0BSD */
 #include "config_model.h"
 
 #include <ctype.h>

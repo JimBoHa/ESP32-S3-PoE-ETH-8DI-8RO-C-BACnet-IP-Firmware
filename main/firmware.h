@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: 0BSD */
 #pragma once
 
 #define FW_PRODUCT_NAME "ESP32-S3-PoE-ETH-8DI-8RO-C BACnet/IP"

@@ -5,15 +5,11 @@ commands, and device health from the Waveshare
 `ESP32-S3-POE-ETH-8DI-8RO-C` as BACnet/IP objects. It replaces the factory
 application and provides authenticated firmware updates over Ethernet.
 
-> **Hardware bring-up firmware:** version 0.13.5 has completed the
-> software-visible target-board acceptance suite: safe relay startup, RTC and
-> W5500 health, DHCP/ICMP/HTTP, BACnet discovery/properties/COV/priorities, all
-> eight one-at-a-time Binary Output commands, 64-request discovery bursts,
-> malformed-packet recovery, persistent configuration, and successful and
-> rejected Ethernet OTA paths. Electrically stimulated inputs, relay contact
-> feedback, destructive recovery tests, proprietary BAS clients, and the
-> endurance run remain incomplete. Disconnect controlled loads during first
-> commissioning.
+> **Commissioning:** disconnect controlled loads during first installation.
+> See the [Windows/Mac test record](docs/PLATFORM_TESTING.md) for browser and
+> physical USB coverage, and [hardware acceptance](docs/HARDWARE_TESTING.md)
+> for remaining electrical, BAS-client, and endurance checks. This project
+> does not claim BTL certification.
 
 This source targets only the 16 MB flash / 8 MB PSRAM model built around an
 `ESP32-S3-WROOM-1U-N16R8`, W5500 Ethernet controller, and TCA9554 relay
@@ -29,9 +25,9 @@ install the recommended release, save the admin key file, then open the
 Ethernet address shown on screen. No terminal, Python, or ESP-IDF installation
 is needed. Initial installation erases the existing firmware and settings.
 
-The installer becomes available after the maintainer enables GitHub Pages and
-publishes the first stable release containing this feature (0.14.0 or newer).
-See the [illustrated setup and publishing guide](docs/BROWSER_INSTALLER.md).
+Start with the **[illustrated beginner guide](docs/BROWSER_INSTALLER.md)**.
+It shows every step with numbered arrows and highlighted buttons, including
+Windows device/file selection, saving the key, and opening the controller.
 For later updates, use the device's **Firmware** tab; Ethernet updates preserve
 the admin key and settings.
 
@@ -126,7 +122,7 @@ tests/run_host_tests.sh
 python tools/package_release.py
 ```
 
-The package is written to `release/v0.14.0/` and contains:
+The package is written to `release/v1.0.0/` and contains:
 
 - `initial-flash.bin` for the first USB installation;
 - `firmware-ota.bin` for later Ethernet updates;
@@ -231,7 +227,7 @@ Upload only `firmware-ota.bin`, never the merged initial-flash image:
 python tools/device_admin.py \
   --device 192.168.75.153 \
   --key-file device.key \
-  ota --file release/v0.14.0/firmware-ota.bin --yes
+  ota --file release/v1.0.0/firmware-ota.bin --yes
 ```
 
 The client checks the ESP image header and project identity. The device signs
@@ -273,7 +269,10 @@ ACLs. Read [Security](docs/SECURITY.md) before deployment.
 
 ## License
 
-Project-owned code is Apache-2.0. The pinned bacnet-stack dependency uses
+Project-owned code and documentation use [0BSD](LICENSE): free commercial,
+proprietary, personal, and modified use, without attribution or a requirement
+to publish your application source. You retain ownership of your own work.
+Third-party license and notice requirements still apply. The pinned bacnet-stack dependency uses
 per-file licenses, primarily GPL-2.0-or-later with GCC-exception-2.0, plus MIT
 and Apache-2.0 files. See [third-party notices](THIRD_PARTY_NOTICES.md) and the
 license directory inside the submodule.

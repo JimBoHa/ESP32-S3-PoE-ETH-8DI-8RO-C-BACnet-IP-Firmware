@@ -73,6 +73,26 @@ were not exercised. Windows Chrome and native x64-PC USB flashing remain
 separate hardware checks; their CI results above do not replace them. Physical
 BOOT-button recovery and public GitHub Pages deployment also remain untested.
 
+## Version 1.0 release validation
+
+Version 1.0.0 adds 0BSD licensing for project-owned code and an expanded
+beginner guide with numbered arrows and highlighted controls. The maintainer
+release workflow now reads the explicitly configured firmware version.
+
+Native Windows Chrome 152.0.7977.83 dialog testing passed on the Windows 11
+ARM64 VM: selecting and cancelling the real USB chooser, opening the key file
+and OTA image through the Windows file dialog, and reconnecting/disconnecting
+without a reset. No Web Serial override or serial preauthorization policy was
+used. Microsoft UI Automation controlled the actual dialog; its native filename
+textbox was filled using the Win32 control API because Windows on ARM exposes
+it as a generic accessibility pane. File contents were read by the browser.
+
+A full Chrome backup exposed an incomplete packet with four blocks in flight.
+The installer now requests one unacknowledged block at a time, with the same
+chunk and whole-flash integrity checks and bounded retries. Full v1.0 hardware
+validation in Chrome and Edge is still in progress. A native x64-PC USB test
+requires separate hardware; x64 GitHub runner checks do not replace it.
+
 ## Windows hardware test procedure
 
 Use Windows 11 on a physical PC, or a Windows VM that owns the actual USB
