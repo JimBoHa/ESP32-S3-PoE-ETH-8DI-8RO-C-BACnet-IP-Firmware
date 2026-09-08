@@ -8,7 +8,7 @@ The same firmware package and setup page are used on both platforms.
 
 ## Automated browser evidence
 
-On 2026-09-07, [GitHub Actions run 34154925507](https://github.com/JimBoHa/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware/actions/runs/34154925507)
+On 2026-09-07, [GitHub Actions run 34170923472](https://github.com/JimBoHa/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware/actions/runs/34170923472)
 passed these desktop-browser checks:
 
 | Runner | Browser | Result |
@@ -68,32 +68,62 @@ the device's exact VID/PID, using Microsoft's
 [SerialAllowUsbDevicesForUrls policy](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies/serialallowusbdevicesforurls).
 The policy was restored after each run. Only port selection was substituted;
 all serial transfers, firmware replies, downloads, and Ethernet requests used
-the real browser and controller. Native Windows device/file chooser dialogs
-were not exercised. Windows Chrome and native x64-PC USB flashing remain
-separate hardware checks; their CI results above do not replace them. Physical
-BOOT-button recovery and public GitHub Pages deployment also remain untested.
+the real browser and controller. Native Windows device/file chooser dialogs and Chrome were excluded from
+that 0.14.0 run. The expanded 1.0.0 results below supersede those gaps. Physical
+BOOT-button recovery and public GitHub Pages deployment remain untested.
 
 ## Version 1.0 release validation
 
-Version 1.0.0 adds 0BSD licensing for project-owned code and an expanded
-beginner guide with numbered arrows and highlighted controls. The maintainer
-release workflow now reads the explicitly configured firmware version.
+Complete 1.0.0 hardware runs passed in **Chrome 152.0.7977.83** and
+**Edge 152.0.4191.66** on September 7, 2026 (Pacific time). Both ran in the
+Windows 11 Home Single Language 25H2 **ARM64** VM with the real controller
+attached through UTM USB passthrough. Final Windows inventory reported build
+26200.9168 and Microsoft's signed USB serial driver 10.0.26100.8521; the VM
+received Windows servicing updates after the earlier 0.14.0 baseline above.
 
-Native Windows Chrome 152.0.7977.83 dialog testing passed on the Windows 11
-ARM64 VM: selecting and cancelling the real USB chooser, opening the key file
-and OTA image through the Windows file dialog, and reconnecting/disconnecting
-without a reset. No Web Serial override or serial preauthorization policy was
-used. Microsoft UI Automation controlled the actual dialog; its native filename
-textbox was filled using the Win32 control API because Windows on ARM exposes
-it as a generic accessibility pane. File contents were read by the browser.
+| Check using the actual Windows browser and controller | Chrome | Edge |
+|---|---|---|
+| Native USB chooser: cancel, select controller, and connect | Passed | Passed |
+| Locked key export denied before installation | Passed | Passed |
+| Full 16,777,216-byte backup with chunk/whole-flash MD5 and copied-file SHA-256 verification | Passed | Passed |
+| Erase, write, flash verification, and verified 1.0.0 USB boot | Passed | Passed |
+| New key download, export locking, and Ethernet discovery/handoff | Passed | Passed |
+| Native key and OTA file dialogs: cancel and select a real file | Passed | Passed |
+| Running-device reconnect/disconnect without a reset | Passed | Passed |
+| Signed Ethernet OTA: alternate slot boots, settings and key retained | Passed | Passed |
+| Same key authorizes a subsequent reboot | Passed | Passed |
+| Final health and 26 read-only BACnet property checks | Passed | Passed |
 
-A full Chrome backup exposed dropped bytes with esptool-js's bundled legacy
+Both final runs used fresh, isolated browser profiles in the normal Windows
+user session. No Web Serial override, file-input substitution, or serial
+preauthorization policy was used. Microsoft UI Automation operated the real
+USB and file dialogs. The native filename textbox was filled through its
+Win32 control API; the browser read the selected file. The test helper was
+made DPI-aware and brought file dialogs to the foreground before operating
+native controls. The final snapshots reported all eight inputs and relay
+commands inactive, with Ethernet, BACnet, RTC, and relay-controller health good.
+
+Windows testing exposed dropped USB bytes with esptool-js's bundled legacy
 RAM loader. Changing its transfer window or baud rate did not fix the failure.
-The installer now pins Espressif's maintained `esp-flasher-stub` 1.2.2 S3 loader,
-which passed the same diagnostic reads at both tested speeds. It retains chunk
-and whole-flash integrity checks and bounded retries. Full v1.0 hardware
-validation in Chrome and Edge is still in progress. A native x64-PC USB test
-requires separate hardware; x64 GitHub runner checks do not replace it.
+The installer now pins Espressif's maintained **esp-flasher-stub 1.2.2** S3
+loader under its MIT license option. This loader passed the same diagnostic
+reads at both 115200 and 460800 baud, followed by the complete runs above.
+Per-chunk and whole-flash integrity checks and bounded retries remain enabled;
+failed backups are rejected before any erase. Earlier failed or interrupted
+runs are retained privately and are not counted as passes.
+
+The 1.0.0 ESP-IDF 5.5.4 build, release package verification, two C test programs,
+45 Python tests, 23 JavaScript tests, 15 local Chromium browser tests,
+production installer build, and workflow lint passed. CI also passed all five
+jobs, including 15 tests each in native Windows x64 and macOS Chrome and Edge.
+The initial image is 718,208 bytes; the OTA image is 587,136 bytes. Packaged
+ZIP and TAR files contain identical tested firmware images and notices.
+
+**Coverage limit:** a native physical x64 Windows PC has not flashed the
+controller. The ARM64 VM exercises the real Windows USB stack, while x64 CI
+exercises browser APIs and fixture-based UI flows without USB hardware. These
+are distinct checks. Public installer deployment, physical BOOT-button key
+recovery, and the broader field/endurance suite also remain separate checks.
 
 ## Windows hardware test procedure
 

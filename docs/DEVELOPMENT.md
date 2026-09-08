@@ -47,6 +47,14 @@ and static integrity of the embedded management interface. The IDF build
 compiles the real ESP32-S3 application, embedded page, and selected
 bacnet-stack sources.
 
+Version 1.0.0 passed complete Windows Chrome and Edge hardware runs with
+native USB and file choosers, full verified backups, erase/flash/boot, key
+handoff and locking, Ethernet OTA, signed reboot, and final BACnet checks.
+The installer pins Espressif's maintained S3 RAM loader after the legacy
+loader lost USB bytes during Windows testing. The tested firmware source is
+unchanged by that browser-loader replacement. See the exact results and
+architecture limits in [platform testing](PLATFORM_TESTING.md#version-10-release-validation).
+
 Version 0.14.0 browser-installer validation on 2026-09-07 used the physical
 ESP32-S3-POE-ETH-8DI-8RO-C and Chrome for Testing 153.0.8010.12 on macOS.
 The production preview completed a full 16,777,216-byte USB backup with
