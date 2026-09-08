@@ -70,7 +70,7 @@ The policy was restored after each run. Only port selection was substituted;
 all serial transfers, firmware replies, downloads, and Ethernet requests used
 the real browser and controller. Native Windows device/file chooser dialogs and Chrome were excluded from
 that 0.14.0 run. The expanded 1.0.0 results below supersede those gaps. Physical
-BOOT-button recovery and public GitHub Pages deployment remain untested.
+BOOT-button recovery remains untested.
 
 ## Version 1.0 release validation
 
@@ -121,11 +121,46 @@ jobs, including 15 tests each in native Windows x64 and macOS Chrome and Edge.
 The initial image is 718,208 bytes; the OTA image is 587,136 bytes. Packaged
 ZIP and TAR files contain identical tested firmware images and notices.
 
-**Coverage limit:** a native physical x64 Windows PC has not flashed the
-controller. The ARM64 VM exercises the real Windows USB stack, while x64 CI
-exercises browser APIs and fixture-based UI flows without USB hardware. These
-are distinct checks. Public installer deployment, physical BOOT-button key
-recovery, and the broader field/endurance suite also remain separate checks.
+### Additional x64 USB validation
+
+Chrome **153.0.8010.27** also flashed the real controller from Windows 11 Pro
+24H2 **x64**, build 26100.1742, emulated by UTM 4.7.5 on an Apple-silicon Mac.
+The installed Chrome binary was x64 with a valid Google signature. Windows
+enumerated the controller as COM3 with Microsoft's signed `usbser.inf` driver
+10.0.26100.1301. The browser sandbox was enabled.
+
+The x64 USB run passed native device selection/cancel, a complete 16 MB backup
+with chunk/whole-flash MD5 and copied-file SHA-256 verification, erase/write
+verification, the 1.0.0 USB boot handshake, new key download and locking,
+Ethernet discovery, and locked reconnect without resetting the controller.
+Native key and firmware file selection/cancel also passed. QEMU mouse and
+keyboard input operated the actual Windows dialogs after screenshot inspection;
+no serial preauthorization policy or file-input substitution was used.
+
+The first post-install disconnect assertion timed out while its installer tab
+was in the background. The controller's reboot count remained unchanged. The
+private test helper now foregrounds the tab and polls the expected state
+without depending on animation frames. A separate post-install continuation
+then passed native USB/file dialogs, locked key export, disconnect without a
+reset, signed OTA to the other slot with settings retained, and a signed reboot
+using the same key. These x64 checks span the USB installation run and its
+successful continuation on September 7–8, 2026 (Pacific time); the interrupted
+run alone is not counted as a complete end-to-end pass. All 26 read-only BACnet
+checks passed afterward, with input 1 and all relay commands inactive and
+Ethernet, BACnet, RTC, and relay-controller health good.
+
+Public HTTPS deployment is checked after stable-release publication, including
+the served image hashes and native USB connection/disconnect in Windows x64
+Chrome and Edge. The outcome is recorded in the
+[1.0.0 release notes](https://github.com/JimBoHa/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware/releases/tag/v1.0.0).
+
+**Coverage limit:** a physical x64 Windows PC has not flashed the controller.
+The ARM64 and emulated x64 VMs both exercise a real Windows USB driver with the
+actual controller, while x64 CI exercises browser APIs and fixture-based UI
+flows without USB hardware. A VM does not reproduce every physical PC's USB
+controller or reset behavior. Physical BOOT-button key recovery and the broader
+field/endurance suite remain separate checks. Complete Edge USB flashing was
+tested in the ARM64 VM; the x64 hardware flashing evidence above is Chrome.
 
 ## Windows hardware test procedure
 
