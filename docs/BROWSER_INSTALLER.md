@@ -145,6 +145,12 @@ locally; only signed management requests leave the browser.
 
 ![Step 6: load the downloaded key file locally](images/install-06-load-key.png)
 
+**Windows file picker:** select your `.key` file, then click **Open**. This
+cropped native Windows example uses a dedicated test folder. On your computer,
+choose the key you saved in **Downloads**; its name and folder will differ.
+
+![Windows: selected private key file and the Open button](images/windows-chrome-key-file-picker.png)
+
 **You should see:** a green connection indicator, version **1.0.0**, and
 **Admin key loaded locally**. The key box shows dots. Bookmark this device
 page; use the actual address shown on your screen, not the example address
@@ -209,6 +215,12 @@ USB reinstallation erases both.
 
 ![Select the app-only Ethernet update image](images/update-01-select.png)
 
+**Windows file picker:** the filename should end in **firmware-ota.bin**.
+Click **Open**. This example uses the test folder; choose the image inside
+the ZIP folder you extracted on your computer.
+
+![Windows: selected firmware-ota.bin and the Open button](images/windows-chrome-ota-file-picker.png)
+
 4. Check the version shown below the file selector. Click **Verify and upload**,
    then approve the browser’s update confirmation. Keep power and Ethernet
    connected while the controller restarts.
@@ -234,7 +246,8 @@ To publish a new tested version:
    builds unpublished until approved. Publish a stable release to promote it.
 3. Watch **Actions → Publish browser installer**. It builds the tagged
    firmware with ESP-IDF 5.5.4, runs host/browser tests, verifies packages,
-   attaches `bacnet-io-vX.Y.Z.tar.gz`, and deploys the HTTPS installer.
+   attaches matching `bacnet-io-vX.Y.Z.zip` and `.tar.gz` packages, and deploys
+   the HTTPS installer. The ZIP opens with Windows and Mac's built-in tools.
 4. Open the installer link from the README and confirm the recommended
    version. Test on a spare controller before recommending a release to users.
 
@@ -286,12 +299,16 @@ It does not connect to or change a controller. Review every image before committ
 
 The browser uses [Espressif esptool-js](https://github.com/espressif/esptool-js)
 for ROM discovery, stub loading, erase, flash, and verification. Version 0.6.1
-is pinned. The adapter uses a bounded, linear-time SLIP packet decoder,
+is pinned, with the maintained ESP32-S3 RAM loader from
+[esp-flasher-stub 1.2.2](https://github.com/espressif/esp-flasher-stub/tree/v1.2.2)
+replacing its legacy stub binaries. The adapter uses a bounded, linear-time SLIP packet decoder,
 supplies an actual RTS reset pulse, and implements the
 documented stub backup read with at most one unacknowledged block. Backups
 use 256 KiB chunks, bounded retries, per-chunk MD5, and a final whole-flash MD5
-check; damaged or inconsistent snapshots are never downloaded. The upstream
-bulk-read default lost data on native USB during bench testing.
+check; damaged or inconsistent snapshots are never downloaded. The legacy
+stub lost USB bytes during Windows testing; the maintained loader passed the
+same diagnostic reads. See [platform testing](PLATFORM_TESTING.md) for the
+complete installation results and hardware coverage.
 
 The running firmware accepts bounded lines on native USB Serial/JTAG:
 

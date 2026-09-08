@@ -1,5 +1,5 @@
 {
-  "source": "Windows 11 ARM64 VM; native Windows Chrome dialog, captured directly from dialog bounds after selecting the real USB device. No image retouching.",
+  "source": "Windows 11 ARM64 VM; actual Chrome USB and file dialogs. Native dialogs resized for legibility, then captured directly from USB-dialog bounds or filename/Open-button bounds. No image retouching.",
   "chrome_version": "152.0.7977.83",
   "files": [
     {
@@ -13,7 +13,31 @@
         "IDAT",
         "IEND"
       ]
+    },
+    {
+      "file": "windows-chrome-key-file-picker.png",
+      "sha256": "18dc4a1b9ab5087c374f9892a8738c712b5a9975e6d7544ac10463788948bdf8",
+      "png_chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "pHYs",
+        "IDAT",
+        "IEND"
+      ]
+    },
+    {
+      "file": "windows-chrome-ota-file-picker.png",
+      "sha256": "1f3b030b7d7535c54ba81ad3c1582520e26ad4c673086c25e1aa80edebf0d6de",
+      "png_chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "pHYs",
+        "IDAT",
+        "IEND"
+      ]
     }
   ],
-  "privacy": "Only native dialog. No desktop, username, personal files, controller address, MAC, or key contents. Loopback origin is the local test installer; COM number is assigned by Windows."
+  "privacy": "Only native USB dialog or filename/Open-button row. No desktop, username, personal files, controller address, MAC, or key contents. Generic C:\\FirmwareTest folders belong only to the isolated test setup; loopback origin is the local installer. Every image visually reviewed."
 }
