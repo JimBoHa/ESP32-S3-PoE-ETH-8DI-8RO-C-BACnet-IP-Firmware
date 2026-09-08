@@ -132,9 +132,14 @@ recovery, and the broader field/endurance suite also remain separate checks.
 Use Windows 11 on a physical PC, or a Windows VM that owns the actual USB
 device. A normal Docker container is not a replacement for this test:
 [containers share the host kernel](https://learn.microsoft.com/en-us/virtualization/windowscontainers/about/),
-and browser fixtures do not exercise a Windows USB driver. On Apple silicon,
-a Windows 11 ARM64 VM with USB passthrough can test the Windows USB stack;
-it does not replace a native x64-PC acceptance test.
+and browser fixtures do not exercise a Windows USB driver. A dedicated Windows
+PC is not required for this procedure. On Apple silicon, a Windows 11 ARM64 VM
+can use hardware virtualization; testing x64 Windows requires CPU emulation,
+which is slower. Both can use the real controller through
+[UTM USB sharing](https://docs.getutm.app/guest-support/sharing/usb/).
+Record the guest architecture and VM software with the results. A VM exercises
+the guest's Windows driver and browser, but does not reproduce every physical
+PC's USB controller or reset behavior.
 
 1. Use a spare controller or obtain permission to erase it. Disconnect
    controlled relay loads and retain a private full backup and the current key.
