@@ -1,0 +1,128 @@
+name: Publish browser installer
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published stable release to recommend, such as v1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-installer-pages
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+
+jobs:
+  firmware:
+    if: github.event_name == 'workflow_dispatch' || (!github.event.release.draft && !github.event.release.prerelease)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: espressif/idf:v5.5.4
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          submodules: recursive
+          persist-credentials: false
+      - name: Validate release version
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, re
+          from pathlib import Path
+          from tools.collect_installer_releases import stable_version
+          tag = os.environ['RELEASE_TAG']
+          stable_version(tag)
+          version = re.search(r'set\(PROJECT_VER "([^"]+)"\)', Path('CMakeLists.txt').read_text()).group(1)
+          if version != tag[1:]:
+              raise SystemExit('Release tag and firmware version must match')
+          PY
+      - name: Build, test, and package tagged firmware
+        shell: bash
+        run: |
+          source /opt/esp/idf/export.sh
+          tests/run_host_tests.sh
+          idf.py set-target esp32s3
+          idf.py build
+          python tools/package_release.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installer-firmware-candidate
+          path: release/
+          if-no-files-found: error
+
+  installer:
+    needs: firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pages: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - uses: actions/download-artifact@v7
+        with:
+          name: installer-firmware-candidate
+          path: candidate
+      - name: Test browser installer
+        working-directory: installer
+        run: |
+          npm ci
+          npm test
+          npx playwright install --with-deps chromium
+          npm run test:browser
+      - name: Collect verified published releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/collect_installer_releases.py \
+            --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG" \
+            --candidate-root candidate \
+            --new-asset "new-asset/bacnet-io-$RELEASE_TAG.tar.gz" \
+            --new-zip "new-asset/bacnet-io-$RELEASE_TAG.zip"
+      - name: Build static installer
+        working-directory: installer
+        run: npm run build
+      - name: Attach new firmware package without replacing existing assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for extension in tar.gz zip; do
+            asset="new-asset/bacnet-io-$RELEASE_TAG.$extension"
+            if [ -f "$asset" ]; then
+              gh release upload "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY"
+            fi
+          done
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: installer/dist
+
+  deploy:
+    needs: installer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

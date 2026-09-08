@@ -1,6 +1,15 @@
 # Third-party notices
 
-This project links third-party components into the firmware image.
+Project-owned application code, tools, installer, and documentation are
+licensed under [0BSD](LICENSE). They may be used, modified, and sold in
+commercial or proprietary products without attribution or source-disclosure
+requirements from this project's license. Users retain ownership of their
+own applications and modifications.
+
+Third-party source files, linked libraries, and the Waveshare photograph
+retain their own licenses and notices. The 0BSD license does not remove their
+requirements or grant rights to third-party trademarks or patents. This
+project links third-party components into the firmware image.
 
 ## bacnet-stack 1.6.0
 
@@ -15,7 +24,8 @@ in each source file. Complete license texts are in
 `third_party/bacnet-stack/license/` and are copied into packaged releases.
 
 No local modifications are made inside the pinned submodule. The ESP32 port
-adapter and firmware application outside the submodule are Apache-2.0.
+adapter and firmware application outside the submodule are 0BSD except
+files carrying their own SPDX identifier (for example the MIT port header).
 
 ## Espressif ESP-IDF 5.5.4
 
@@ -28,6 +38,27 @@ the applicable notices when redistributing firmware. The release packager
 copies the ESP-IDF framework license and the relevant FreeRTOS, lwIP, mbedTLS,
 cJSON, http-parser, and C-library license texts into `licenses/`. See the
 ESP-IDF source tree and per-component SPDX metadata for exact terms.
+
+## Browser installer
+
+The browser installer bundles [esptool-js 0.6.1](https://github.com/espressif/esptool-js)
+(Apache-2.0), [pako](https://github.com/nodeca/pako) (MIT and Zlib), and
+[spark-md5 3.0.2](https://github.com/satazor/js-spark-md5) (MIT option).
+`npm run build` copies their license texts into the site's `licenses.txt`.
+Package versions and integrity hashes are pinned in `installer/package-lock.json`.
+
+The installer replaces esptool-js's legacy flasher binaries with the ESP32-S3
+RAM loader from [esp-flasher-stub 1.2.2](https://github.com/espressif/esp-flasher-stub/tree/v1.2.2),
+under its MIT license option. Its copyright and license are also included in
+`licenses.txt`. Only this supported-chip stub is bundled. The RAM loader is an
+installation tool and is not linked into the controller's application firmware.
+
+`installer/public/board-reference.jpg` is a Waveshare product photograph used
+to identify the supported hardware. Copyright remains with Waveshare; this
+image is excluded from the project's 0BSD license.
+The same exclusion applies to the photograph reproduced inside documentation
+screenshots in `docs/images/`.
+Source: <https://www.waveshare.com/img/devkit/accBoard/ESP32-S3-ETH-8DI-8RO-C/ESP32-S3-ETH-8DI-8RO-C-details-2-2.jpg>.
 
 ## Standards and marks
 

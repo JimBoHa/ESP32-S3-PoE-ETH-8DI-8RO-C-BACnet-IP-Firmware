@@ -27,6 +27,12 @@ as `bacnet_udp_receive_mailbox_size`.
 
 ## Tests
 
+The [browser installer guide](BROWSER_INSTALLER.md#local-development-and-tests)
+documents browser tests and the release-to-Pages workflow. Browser changes
+require the Node tests, Chromium interaction tests, and a production build;
+USB transport changes also require a physical-controller check. A mock device
+fixture cannot prove Web Serial timing, flash contents, or USB reboot behavior.
+
 ```sh
 tests/run_host_tests.sh
 idf.py fullclean
@@ -40,6 +46,52 @@ URL, key, OTA descriptor, canonical request, HMAC, and relay command behavior;
 and static integrity of the embedded management interface. The IDF build
 compiles the real ESP32-S3 application, embedded page, and selected
 bacnet-stack sources.
+
+Version 1.0.0 passed complete Windows Chrome and Edge hardware runs with
+native USB and file choosers, full verified backups, erase/flash/boot, key
+handoff and locking, Ethernet OTA, signed reboot, and final BACnet checks.
+The installer pins Espressif's maintained S3 RAM loader after the legacy
+loader lost USB bytes during Windows testing. The tested firmware source is
+unchanged by that browser-loader replacement. See the exact results and
+architecture limits in [platform testing](PLATFORM_TESTING.md#version-10-release-validation).
+
+Version 0.14.0 browser-installer validation on 2026-09-07 used the physical
+ESP32-S3-POE-ETH-8DI-8RO-C and Chrome for Testing 153.0.8010.12 on macOS.
+The production preview completed a full 16,777,216-byte USB backup with
+per-chunk and whole-flash MD5 verification, then erased and installed the
+SHA-256-checked release image through the browser. Flash verification,
+first-boot USB status, Ethernet discovery, private key download, and explicit
+key-export locking passed. Reconnecting detected the running firmware without
+another reset and rejected a key request after locking.
+
+The downloaded key loaded through the embedded management page and signed a
+successful Ethernet OTA upload of the 587,152-byte application. The controller
+booted the other OTA slot; the same key then authorized a reboot. Directed
+BACnet discovery and 26 read-only property checks passed after USB installation
+and again after OTA. All eight inputs and relay commands were inactive; RTC,
+relay-controller, Ethernet, and BACnet health checks passed. Private backups,
+keys, and site-specific reports are retained outside the repository.
+
+The Windows hardware run also completed the full browser backup, erase/flash,
+USB boot, key download/lock, Ethernet handoff, signed OTA, and signed reboot in
+Edge 152.0.4191.66 on Windows 11 ARM64 with real USB passthrough. A Windows
+disconnect reset was reproduced and fixed: USB setup now clears RTS before
+DTR in separate calls before closing the port. This avoids the intermediate
+RTS=1, DTR=0 reset state described in the USB Serial/JTAG chapter of the
+[ESP32-S3 technical reference manual](https://documentation.espressif.com/esp32-s3_technical_reference_manual_en.pdf).
+Separate calls matter because Chromium's Windows
+[signal-control implementation](https://chromium.googlesource.com/chromium/src/+/3f506bc44cf5a6c0c7c0058b5f7ab31eead19fbd/services/device/serial/serial_io_handler_win.cc)
+processes DTR before RTS when both are supplied together. Hardware reconnect
+and disconnect checks then passed without a reset. The expanded 22-test Node
+suite, 15 Chromium browser tests, and production build passed; 26 read-only
+BACnet checks passed after Windows installation and OTA/reboot.
+
+See [platform testing](PLATFORM_TESTING.md) for exact Windows driver, VM,
+automation, and native-dialog coverage limits. This validates the installation
+workflow, not the full hardware acceptance or endurance suite below. Physical
+BOOT-button key recovery and public GitHub Pages deployment remain separate
+checks. Automated tests cover the BOOT hold duration, export expiry, and lock
+policy.
 
 The repeatable live BACnet suite and its explicit relay safety gate are
 documented in [Hardware acceptance testing](HARDWARE_TESTING.md). Its JSON

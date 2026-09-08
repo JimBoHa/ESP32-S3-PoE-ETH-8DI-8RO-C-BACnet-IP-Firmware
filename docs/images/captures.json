@@ -1,0 +1,21 @@
+{
+  "firmware": "1.0.0",
+  "browser": "153.0.8010.12",
+  "viewport": "1440 x 1080",
+  "source": "Actual application interfaces rendered with isolated example data; no live hardware.",
+  "files": [
+    "install-01-connect.png",
+    "install-02-confirm.png",
+    "install-03-writing.png",
+    "install-04-key-network.png",
+    "install-07-finish.png",
+    "install-05-complete.png",
+    "install-06-load-key.png",
+    "firmware-relays.png",
+    "firmware-status.png",
+    "firmware-configuration.png",
+    "firmware-update.png",
+    "update-01-select.png",
+    "update-02-verify.png"
+  ]
+}

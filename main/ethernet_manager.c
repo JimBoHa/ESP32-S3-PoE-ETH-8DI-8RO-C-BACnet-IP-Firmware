@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: 0BSD */
 #include "ethernet_manager.h"
 
 #include <string.h>
