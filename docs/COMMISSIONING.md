@@ -14,6 +14,10 @@ looking variant. Inspect [the hardware map](HARDWARE.md).
 
 ## 2. Verify the release
 
+For a graphical installation, follow the [browser installer guide](BROWSER_INSTALLER.md).
+It performs release and flash integrity checks automatically. The command-line
+steps below remain available for advanced recovery.
+
 On the field machine:
 
 ```sh
@@ -38,23 +42,23 @@ python -m esptool --chip esp32s3 --port /dev/DEVICE \
 
 Never guess the serial path. On Windows it will normally be a `COM` port.
 
-## 4. Capture first-boot information
+## 4. Save the admin key
 
-Open the USB serial console at 115200 baud before or immediately after reset.
-The firmware prints:
+Close other serial monitors and open the [USB installer](BROWSER_INSTALLER.md).
+Choose **Connect controller**, then **Download admin key**. Firmware 0.14.0
+and newer never print the key in ordinary boot logs. If the first five-minute
+window has expired or the board was reset, hold BOOT for three seconds while
+firmware runs, release it, and download within 60 seconds.
 
-- derived Ethernet MAC;
-- DHCP/static IPv4 address when acquired;
-- the random admin key on first boot only.
-
-Save the 64 hexadecimal key characters in a file outside the repository:
+Keep the downloaded file outside the repository and restrict its permissions:
 
 ```sh
 chmod 600 device.key
 ```
 
-If the key scrolls past before capture, erasing NVS/flash and recommissioning is
-the recovery path.
+Choose **Finish USB setup** to lock export and release the port. Older firmware
+prints its key once on first boot; use the matching version's instructions or
+perform an intentional upgrade/recovery with the browser installer.
 
 ## 5. Find and inspect the device
 
@@ -149,7 +153,9 @@ the prior slot.
 
 - **No IP:** inspect serial logs, DHCP leases, link LEDs, PoE/switch VLAN, and
   static configuration. USB reflash remains available.
-- **Lost admin key:** USB erase/reflash and recommission. There is no backdoor.
+- **Lost admin key:** on 0.14.0 or newer, use USB plus a three-second physical
+  BOOT hold to recover it without changing settings. Erase/recommission to
+  replace a compromised key.
 - **OTA rejected:** use the app-only image from the release, verify SHA-256,
   project/version, key file, and partition-size limit.
 - **Relay expander failure:** firmware reports fault and a pending OTA image

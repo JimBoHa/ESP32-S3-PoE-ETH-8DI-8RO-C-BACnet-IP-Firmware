@@ -5,19 +5,46 @@ commands, and device health from the Waveshare
 `ESP32-S3-POE-ETH-8DI-8RO-C` as BACnet/IP objects. It replaces the factory
 application and provides authenticated firmware updates over Ethernet.
 
-> **Hardware bring-up firmware:** version 0.13.5 has completed the
-> software-visible target-board acceptance suite: safe relay startup, RTC and
-> W5500 health, DHCP/ICMP/HTTP, BACnet discovery/properties/COV/priorities, all
-> eight one-at-a-time Binary Output commands, 64-request discovery bursts,
-> malformed-packet recovery, persistent configuration, and successful and
-> rejected Ethernet OTA paths. Electrically stimulated inputs, relay contact
-> feedback, destructive recovery tests, proprietary BAS clients, and the
-> endurance run remain incomplete. Disconnect controlled loads during first
-> commissioning.
+> **Commissioning:** disconnect controlled loads during first installation.
+> See the [Windows/Mac test record](docs/PLATFORM_TESTING.md) for browser and
+> physical USB coverage, and [hardware acceptance](docs/HARDWARE_TESTING.md)
+> for remaining electrical, BAS-client, and endurance checks. This project
+> does not claim BTL certification.
 
 This source targets only the 16 MB flash / 8 MB PSRAM model built around an
 `ESP32-S3-WROOM-1U-N16R8`, W5500 Ethernet controller, and TCA9554 relay
 expander. Verify the exact product label and board revision before flashing.
+
+## Install with your browser
+
+**[Open the USB firmware installer](https://JimBoHa.github.io/ESP32-S3-PoE-ETH-8DI-8RO-C-BACnet-IP-Firmware/)**
+
+Use desktop Chrome or Edge, a USB-C data cable, and the exact board shown in
+the installer. Connect the controller, optionally download a recovery backup,
+install the recommended release, save the admin key file, then open the
+Ethernet address shown on screen. No terminal, Python, or ESP-IDF installation
+is needed. Initial installation erases the existing firmware and settings.
+
+Start with the **[illustrated beginner guide](docs/BROWSER_INSTALLER.md)**.
+It shows every step with numbered arrows and highlighted buttons, including
+Windows device/file selection, saving the key, and opening the controller.
+For later updates, use the device's **Firmware** tab; Ethernet updates preserve
+the admin key and settings.
+
+![USB installer: connect the supported board from a desktop browser](docs/images/install-01-connect.png)
+
+## Interface preview
+
+Monitor eight inputs, command eight relays at a selected BACnet priority,
+inspect device health, configure networking and object names, and update
+firmware through the device's web interface.
+
+![Relay control and input monitoring in the device interface](docs/images/firmware-relays.png)
+
+Screenshots show the actual interfaces with example data; addresses, keys,
+and I/O states are illustrative. See the [interface tour](docs/INTERFACE_GUIDE.md)
+for all four tabs and the [Windows/Mac test record](docs/PLATFORM_TESTING.md)
+for the distinction between browser tests and physical USB validation.
 
 ## Features
 
@@ -40,6 +67,8 @@ expander. Verify the exact product label and board revision before flashing.
   relay commands, OTA, and reboot.
 - Read-only status/configuration HTTP endpoints and a standard-library Python
   commissioning client for scripted management.
+- Browser USB installation, verified recovery backups, Ethernet address
+  discovery, and physically gated admin-key downloads.
 
 ## BACnet object map
 
@@ -93,15 +122,15 @@ tests/run_host_tests.sh
 python tools/package_release.py
 ```
 
-The package is written to `release/v0.13.5/` and contains:
+The package is written to `release/v1.0.0/` and contains:
 
 - `initial-flash.bin` for the first USB installation;
 - `firmware-ota.bin` for later Ethernet updates;
 - individual bootloader, partition-table, and OTA-data images;
 - a manifest, SHA-256 checksum list, and license notices.
 
-The application partition is 6 MiB. Version 0.13.5 is 578,160 bytes and leaves
-about 91% of either application slot free.
+The application partition is 6 MiB. The build reports image size and remaining
+space; the current firmware uses about 9% of either application slot.
 
 ## Web management
 
@@ -125,8 +154,13 @@ client is preferred when the network path is not fully trusted.
 ## Persistent configuration
 
 On first boot the firmware installs safe defaults and creates a random 32-byte
-admin key in NVS. The key is printed to the USB serial console once. Save it in
-a mode-0600 file; it cannot be retrieved through the network API.
+admin key in NVS. Save it using **Download admin key** in the USB installer,
+then use **Load key file** in the device's management interface. It is never
+printed in ordinary boot logs or exposed through the network API. The first
+boot permits USB key download for five minutes; later recovery requires
+holding the physical BOOT button for three seconds while firmware is running.
+See [key recovery](docs/BROWSER_INSTALLER.md#recover-a-key-without-erasing-settings).
+Keep the downloaded file private (mode 0600 on macOS/Linux).
 
 Public read-only calls:
 
@@ -193,7 +227,7 @@ Upload only `firmware-ota.bin`, never the merged initial-flash image:
 python tools/device_admin.py \
   --device 192.168.75.153 \
   --key-file device.key \
-  ota --file release/v0.13.5/firmware-ota.bin --yes
+  ota --file release/v1.0.0/firmware-ota.bin --yes
 ```
 
 The client checks the ESP image header and project identity. The device signs
@@ -211,6 +245,9 @@ ACLs. Read [Security](docs/SECURITY.md) before deployment.
 ## Documentation
 
 - [Commissioning and recovery](docs/COMMISSIONING.md)
+- [Browser installation and release publishing](docs/BROWSER_INSTALLER.md)
+- [Interface tour with screenshots](docs/INTERFACE_GUIDE.md)
+- [Windows and Mac compatibility testing](docs/PLATFORM_TESTING.md)
 - [Hardware mapping and electrical cautions](docs/HARDWARE.md)
 - [Hardware acceptance testing](docs/HARDWARE_TESTING.md)
 - [Soak testing and health logs](docs/SOAK_TESTING.md)
@@ -227,11 +264,15 @@ ACLs. Read [Security](docs/SECURITY.md) before deployment.
 - No CAN, TF-card, buzzer, RGB LED, or RTC timekeeping objects yet.
 - IPv4 only; no IPv6.
 - No TLS, Secure Boot, flash encryption, or eFuse provisioning.
-- Loss of the admin key requires USB recovery or an NVS erase.
+- Loss of the admin key requires physical USB/BOOT access; replacing a
+  compromised key requires an intentional erase and recommissioning.
 
 ## License
 
-Project-owned code is Apache-2.0. The pinned bacnet-stack dependency uses
+Project-owned code and documentation use [0BSD](LICENSE): free commercial,
+proprietary, personal, and modified use, without attribution or a requirement
+to publish your application source. You retain ownership of your own work.
+Third-party license and notice requirements still apply. The pinned bacnet-stack dependency uses
 per-file licenses, primarily GPL-2.0-or-later with GCC-exception-2.0, plus MIT
 and Apache-2.0 files. See [third-party notices](THIRD_PARTY_NOTICES.md) and the
 license directory inside the submodule.

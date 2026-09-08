@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-License-Identifier: 0BSD -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -242,6 +242,8 @@
         </label>
         <button id="showKey" type="button" class="action">Show</button>
         <button id="clearKey" type="button" class="action">Clear</button>
+        <button id="loadKey" type="button" class="action">Load key file</button>
+        <input id="keyFile" type="file" accept=".key,.txt,text/plain" hidden>
         <label class="priority-field">BACnet priority
           <select id="relayPriority" aria-label="BACnet relay command priority"></select>
         </label>
@@ -776,6 +778,22 @@
     finally { updateAuthState(); }
   });
   $('adminKey').addEventListener('input', updateAuthState);
+  $('loadKey').addEventListener('click', () => $('keyFile').click());
+  $('keyFile').addEventListener('change', async () => {
+    const file = $('keyFile').files[0];
+    try {
+      if (!file) return;
+      if (file.size > 256) throw new Error('Select the small admin key file downloaded during USB setup.');
+      const value = (await file.text()).trim();
+      if (!/^[0-9a-fA-F]{64}$/.test(value)) throw new Error('The key file must contain exactly 64 hexadecimal characters.');
+      $('adminKey').value = value;
+      $('adminKey').type = 'password';
+      $('showKey').textContent = 'Show';
+      updateAuthState();
+      notify('Admin key loaded locally. The file was not uploaded.');
+    } catch (error) { notify(error.message, true); }
+    finally { $('keyFile').value = ''; }
+  });
   $('showKey').addEventListener('click', () => { const input=$('adminKey'); input.type=input.type === 'password' ? 'text' : 'password'; $('showKey').textContent=input.type === 'password' ? 'Show' : 'Hide'; });
   $('clearKey').addEventListener('click', () => { $('adminKey').value=''; $('adminKey').type='password'; $('showKey').textContent='Show'; updateAuthState(); });
   $('allOff').addEventListener('click', () => bulkRelay('off').catch(error => notify(error.message, true)));
