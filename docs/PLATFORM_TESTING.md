@@ -81,7 +81,7 @@ attached through UTM USB passthrough. Final Windows inventory reported build
 26200.9168 and Microsoft's signed USB serial driver 10.0.26100.8521; the VM
 received Windows servicing updates after the earlier 0.14.0 baseline above.
 
-| Check using the actual Windows browser and controller | Chrome | Edge |
+| Check for each Windows installation run | Chrome | Edge |
 |---|---|---|
 | Native USB chooser: cancel, select controller, and connect | Passed | Passed |
 | Locked key export denied before installation | Passed | Passed |
@@ -100,7 +100,9 @@ preauthorization policy was used. Microsoft UI Automation operated the real
 USB and file dialogs. The native filename textbox was filled through its
 Win32 control API; the browser read the selected file. The test helper was
 made DPI-aware and brought file dialogs to the foreground before operating
-native controls. The final snapshots reported all eight inputs and relay
+native controls. Post-run BACnet property checks used a separate macOS bench
+client; the Windows browsers checked health through the controller's HTTP API.
+The final snapshots reported all eight inputs and relay
 commands inactive, with Ethernet, BACnet, RTC, and relay-controller health good.
 
 Windows testing exposed dropped USB bytes with esptool-js's bundled legacy
