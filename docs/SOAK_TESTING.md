@@ -10,6 +10,8 @@ The monitor treats these conditions as failures:
 - a missed or malformed BACnet or HTTP response;
 - an unexpected reboot, firmware/partition/IP/identity change, or configuration
   change;
+- on v1.1.0 and newer, an unlocked/conflicting instance, missing or invalid
+  assignment telemetry, or a change in the cumulative instance-conflict count;
 - a missing, undersized, or changing compiled BACnet UDP receive mailbox;
 - Ethernet, IPv4, BACnet, TCA9554, or RTC becoming unhealthy;
 - unexpected relay command/output state or active priorities;
@@ -19,6 +21,15 @@ The monitor treats these conditions as failures:
 Digital inputs are logged but may change without failing the soak. Host-side
 JSONL avoids periodic writes to the ESP32 flash and preserves the exact status,
 latencies, alerts, reset cause, configuration fingerprint, and a final summary.
+
+For v1.1.0+, both manual and automatically assigned instances must report
+`locked` with `device_instance_locked=true` before a baseline is accepted.
+Earlier firmware without assignment telemetry remains supported. A nonzero
+conflict count at baseline is allowed when the instance is already locked:
+automatic discovery can resolve collisions before the run begins. Any later
+count change or `locked-conflict` warning fails the soak even if the numeric
+Device instance does not change. These checks use the controller's observed
+conflicts; they cannot find an offline or unreachable duplicate device.
 
 For a 24-hour, one-minute-interval run with all relays expected off:
 

@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tools import soak_monitor
 
@@ -63,6 +64,20 @@ def bacnet_response() -> dict[str, object]:
         "segmentation": 3,
         "vendor_id": 260,
     }
+
+
+def instance_health_values(
+    *, automatic: bool = True, conflicts: int = 0
+) -> tuple[dict[str, object], dict[str, object]]:
+    status = healthy_status()
+    status.update(
+        firmware_version="1.1.0",
+        bacnet_instance_status="locked",
+        bacnet_instance_conflicts=conflicts,
+    )
+    config = healthy_config()
+    config.update(device_instance_auto=automatic, device_instance_locked=True)
+    return status, config
 
 
 class SoakMonitorTests(unittest.TestCase):
@@ -122,6 +137,159 @@ class SoakMonitorTests(unittest.TestCase):
         status["bacnet_udp_receive_mailbox_size"] = 63
         with self.assertRaisesRegex(soak_monitor.SoakError, "below the release minimum"):
             soak_monitor.Baseline.from_values(status, healthy_config())
+
+    def test_locked_automatic_and_manual_instances_are_healthy(self) -> None:
+        for automatic in (True, False):
+            # Startup may resolve a collision before choosing and locking an ID.
+            for conflicts in (0, 2):
+                with self.subTest(automatic=automatic, conflicts=conflicts):
+                    status, config = instance_health_values(
+                        automatic=automatic, conflicts=conflicts
+                    )
+                    baseline = soak_monitor.Baseline.from_values(status, config)
+                    self.assertEqual(baseline.bacnet_instance_conflicts, conflicts)
+                    self.assertEqual(
+                        soak_monitor.evaluate_sample(
+                            baseline, status, status, config, bacnet_response(),
+                            expected_relay_mask=0, minimum_heap_bytes=200000,
+                        ),
+                        [],
+                    )
+
+    def test_instance_health_rejects_unready_or_conflicting_baseline(self) -> None:
+        for state in (
+            "waiting-for-network", "discovering", "checking-candidate", "saving",
+            "range-full", "save-failed", "reboot-required", "locked-conflict",
+            "unknown", None,
+        ):
+            with self.subTest(state=state):
+                status, config = instance_health_values()
+                status["bacnet_instance_status"] = state
+                with self.assertRaisesRegex(soak_monitor.SoakError, "instance"):
+                    soak_monitor.Baseline.from_values(status, config)
+
+    def test_instance_health_rejects_missing_or_invalid_telemetry(self) -> None:
+        status_fields = {
+            "bacnet_instance_status": (None, 1, True),
+            "bacnet_instance_conflicts": (None, -1, 2**32, 0.0, True, "0"),
+        }
+        config_fields = {
+            "device_instance_auto": (None, 0, "true"),
+            "device_instance_locked": (None, False, 1, "true"),
+        }
+        for is_config, cases in ((False, status_fields), (True, config_fields)):
+            for key, values in cases.items():
+                for value in values:
+                    with self.subTest(is_config=is_config, key=key, value=value):
+                        status, config = instance_health_values()
+                        target = config if is_config else status
+                        target[key] = value
+                        with self.assertRaisesRegex(soak_monitor.SoakError, "instance"):
+                            soak_monitor.Baseline.from_values(status, config)
+                with self.subTest(is_config=is_config, missing=key):
+                    status, config = instance_health_values()
+                    del (config if is_config else status)[key]
+                    with self.assertRaisesRegex(soak_monitor.SoakError, "instance"):
+                        soak_monitor.Baseline.from_values(status, config)
+
+    def test_new_firmware_requires_instance_telemetry_even_if_all_fields_missing(self) -> None:
+        for version in ("1.1.0", "1.1.0-dev", "1.2.0", "2.0.0"):
+            with self.subTest(version=version):
+                status = healthy_status()
+                status["firmware_version"] = version
+                with self.assertRaisesRegex(soak_monitor.SoakError, "instance"):
+                    soak_monitor.Baseline.from_values(status, healthy_config())
+
+    def test_partial_instance_telemetry_is_not_treated_as_legacy(self) -> None:
+        for key, value in (
+            ("bacnet_instance_status", "locked"),
+            ("bacnet_instance_conflicts", 0),
+        ):
+            with self.subTest(key=key):
+                status = healthy_status()
+                status[key] = value
+                with self.assertRaisesRegex(soak_monitor.SoakError, "instance"):
+                    soak_monitor.Baseline.from_values(status, healthy_config())
+
+    def test_instance_health_changes_alert_during_run(self) -> None:
+        status, config = instance_health_values(conflicts=2)
+        baseline = soak_monitor.Baseline.from_values(status, config)
+        changes = (
+            ({"bacnet_instance_status": "locked-conflict"}, {}, "instance-not-locked"),
+            ({"bacnet_instance_status": "discovering"}, {}, "instance-not-locked"),
+            ({"bacnet_instance_conflicts": 3}, {}, "bacnet_instance_conflicts-changed"),
+            ({"bacnet_instance_conflicts": 0}, {}, "bacnet_instance_conflicts-changed"),
+            ({"bacnet_instance_conflicts": True}, {}, "instance-conflicts-invalid"),
+            ({}, {"device_instance_locked": False}, "instance-configuration-unlocked"),
+            ({}, {"device_instance_auto": "true"}, "instance-mode-invalid"),
+        )
+        for status_delta, config_delta, expected in changes:
+            with self.subTest(status=status_delta, config=config_delta):
+                alerts = soak_monitor.evaluate_sample(
+                    baseline, status, dict(status, **status_delta),
+                    dict(config, **config_delta), bacnet_response(),
+                    expected_relay_mask=0, minimum_heap_bytes=200000,
+                )
+                self.assertIn(expected, " ".join(alerts))
+        missing = dict(status)
+        del missing["bacnet_instance_status"]
+        del missing["bacnet_instance_conflicts"]
+        self.assertIn(
+            "instance-not-locked",
+            " ".join(soak_monitor.evaluate_sample(
+                baseline, status, missing, config, bacnet_response(),
+                expected_relay_mask=0, minimum_heap_bytes=200000,
+            )),
+        )
+
+    def test_legacy_baseline_does_not_require_new_instance_fields(self) -> None:
+        status = healthy_status()
+        config = healthy_config()
+        baseline = soak_monitor.Baseline.from_values(status, config)
+        self.assertIsNone(baseline.bacnet_instance_conflicts)
+        self.assertEqual(
+            soak_monitor.evaluate_sample(
+                baseline, status, status, config, bacnet_response(),
+                expected_relay_mask=0, minimum_heap_bytes=200000,
+            ),
+            [],
+        )
+
+    def test_run_summary_fails_on_duplicate_without_actuating_device(self) -> None:
+        for conflict in (False, True):
+            with self.subTest(conflict=conflict), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "soak.jsonl"
+                args = soak_monitor.build_parser().parse_args([
+                    "--device-address", "192.168.75.154",
+                    "--device-instance", "599153", "--output", str(path),
+                    "--duration", "1", "--interval", "1", "--timeout", "0.1",
+                ])
+                status, config = instance_health_values()
+                changed = dict(status)
+                if conflict:
+                    changed.update(
+                        bacnet_instance_status="locked-conflict", bacnet_instance_conflicts=1
+                    )
+                bacnet = dict(bacnet_response(), latency_ms=1.0)
+                responses = [
+                    (status, config, bacnet, 1.0, 1.0),
+                    (changed, config, bacnet, 1.0, 1.0),
+                ]
+                with (
+                    patch.object(soak_monitor, "take_sample", side_effect=responses),
+                    patch.object(soak_monitor.time, "monotonic", side_effect=range(100)),
+                    patch("builtins.print"),
+                ):
+                    result = soak_monitor.run_monitor(args)
+                records = [json.loads(line) for line in path.read_text().splitlines()]
+                summary = records[-1]
+                self.assertEqual(result, int(conflict))
+                self.assertEqual(summary["samples"], 2)
+                self.assertEqual(summary["request_failures"], 0)
+                self.assertEqual(summary["samples_with_alerts"], int(conflict))
+                self.assertEqual(summary["success"], not conflict)
+                if conflict:
+                    self.assertIn("bacnet-instance-not-locked", " ".join(records[-2]["alerts"]))
 
     def test_reboot_relay_heap_and_config_changes_alert(self) -> None:
         status = healthy_status()
