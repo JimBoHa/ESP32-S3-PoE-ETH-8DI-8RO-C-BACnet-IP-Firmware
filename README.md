@@ -29,7 +29,9 @@ Start with the **[illustrated beginner guide](docs/BROWSER_INSTALLER.md)**.
 It shows every step with numbered arrows and highlighted buttons, including
 Windows device/file selection, saving the key, and opening the controller.
 For later updates, use the device's **Firmware** tab; Ethernet updates preserve
-the admin key and settings.
+the admin key and settings. Output priority arrays restart empty; preserving
+a BAS mapping does not preserve its command. See [command recovery after an
+update or restart](docs/BACNET_COMMAND_RECOVERY.md).
 
 ![USB installer: connect the supported board from a desktop browser](docs/images/install-01-connect.png)
 
