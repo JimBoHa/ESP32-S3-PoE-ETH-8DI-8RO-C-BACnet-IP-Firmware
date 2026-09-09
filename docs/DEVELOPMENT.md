@@ -50,7 +50,9 @@ git diff --check
 
 Host tests cover persistent-model validation/CRC behavior; management-client
 URL, key, OTA descriptor, canonical request, HMAC, and relay command behavior;
-and static integrity of the embedded management interface. The IDF build
+bounded BACnet command-trace filtering, response association, truncation, ring
+ordering, and authenticated client routing; and static integrity of the embedded
+management interface. The IDF build
 compiles the real ESP32-S3 application, embedded page, and selected
 bacnet-stack sources.
 

@@ -204,6 +204,77 @@ static esp_err_t status_handler(httpd_req_t *request)
     return result;
 }
 
+static esp_err_t command_trace_handler(httpd_req_t *request)
+{
+    char hash[FW_AUTH_HEX_SHA256_LEN + 1];
+    char reason[96];
+    if (request->content_len != 0) {
+        return send_error(request, "400 Bad Request", "command trace GET requires an empty body");
+    }
+    if (!auth_sha256_hex(NULL, 0, hash) ||
+        !request_authorize(request, "GET", "/api/v1/bacnet/command-trace", 0,
+            hash, reason, sizeof(reason))) {
+        return send_error(request, "401 Unauthorized", "command trace requires valid admin authentication");
+    }
+    bacnet_command_trace_snapshot_t snapshot;
+    if (!bacnet_app_command_trace_get(&snapshot)) {
+        return send_error(request, "503 Service Unavailable", "BACnet snapshot unavailable");
+    }
+    httpd_resp_set_type(request, "application/json");
+    httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+    /* Stream a fixed-size snapshot without allocating a large cJSON tree on
+       a controller whose heap is also serving BACnet and OTA traffic. */
+    char chunk[512];
+    int length = snprintf(chunk, sizeof(chunk),
+        "{\"schema_version\":1,\"capacity\":%u,\"apdu_byte_limit\":%u,"
+        "\"total_records\":%llu,\"overwritten_records\":%llu,"
+        "\"write_property_requests\":%llu,\"write_property_multiple_requests\":%llu,"
+        "\"records\":[",
+        BACNET_COMMAND_TRACE_CAPACITY, BACNET_COMMAND_TRACE_APDU_BYTES,
+        (unsigned long long)snapshot.total_records,
+        (unsigned long long)(snapshot.total_records - snapshot.retained_records),
+        (unsigned long long)snapshot.write_property_requests,
+        (unsigned long long)snapshot.write_property_multiple_requests);
+    if (length < 0 || (size_t)length >= sizeof(chunk)) {
+        return ESP_FAIL;
+    }
+    esp_err_t result = httpd_resp_send_chunk(request, chunk, length);
+    for (unsigned i = 0; result == ESP_OK && i < snapshot.retained_records; ++i) {
+        const bacnet_command_trace_record_t *record = &snapshot.records[i];
+        char hex[BACNET_COMMAND_TRACE_APDU_BYTES * 2U + 1U];
+        static const char digits[] = "0123456789abcdef";
+        for (unsigned byte = 0; byte < record->captured_length; ++byte) {
+            hex[byte * 2U] = digits[record->apdu[byte] >> 4U];
+            hex[byte * 2U + 1U] = digits[record->apdu[byte] & 0x0fU];
+        }
+        hex[record->captured_length * 2U] = '\0';
+        char send_result[16] = "null";
+        if (record->outgoing) {
+            (void)snprintf(send_result, sizeof(send_result), "%ld", (long)record->send_result);
+        }
+        length = snprintf(chunk, sizeof(chunk),
+            "%s{\"sequence\":%llu,\"uptime_ms\":%llu,\"direction\":\"%s\","
+            "\"peer\":\"%u.%u.%u.%u:%u\",\"service_choice\":%u,"
+            "\"processing_enabled\":%s,\"send_result\":%s,"
+            "\"apdu_length\":%u,\"captured_length\":%u,\"apdu_hex\":\"%s\"}",
+            i ? "," : "", (unsigned long long)record->sequence,
+            (unsigned long long)record->uptime_ms, record->outgoing ? "tx" : "rx",
+            (unsigned)record->peer[0], (unsigned)record->peer[1],
+            (unsigned)record->peer[2], (unsigned)record->peer[3],
+            ((unsigned)record->peer[4] << 8U) | record->peer[5],
+            (unsigned)record->service_choice, record->processing_enabled ? "true" : "false",
+            send_result, (unsigned)record->apdu_length, (unsigned)record->captured_length, hex);
+        if (length < 0 || (size_t)length >= sizeof(chunk)) {
+            return ESP_FAIL;
+        }
+        result = httpd_resp_send_chunk(request, chunk, length);
+    }
+    if (result == ESP_OK) {
+        result = httpd_resp_send_chunk(request, "]}", 2);
+    }
+    return result == ESP_OK ? httpd_resp_send_chunk(request, NULL, 0) : result;
+}
+
 static esp_err_t challenge_handler(httpd_req_t *request)
 {
     char nonce[FW_AUTH_HEX_NONCE_LEN + 1];
@@ -676,6 +747,7 @@ esp_err_t web_admin_start(void)
     const httpd_uri_t handlers[] = {
         {.uri = "/", .method = HTTP_GET, .handler = root_handler},
         {.uri = "/api/v1/status", .method = HTTP_GET, .handler = status_handler},
+        {.uri = "/api/v1/bacnet/command-trace", .method = HTTP_GET, .handler = command_trace_handler},
         {.uri = "/api/v1/auth/challenge", .method = HTTP_GET, .handler = challenge_handler},
         {.uri = "/api/v1/config", .method = HTTP_GET, .handler = config_get_handler},
         {.uri = "/api/v1/config", .method = HTTP_PUT, .handler = config_put_handler},

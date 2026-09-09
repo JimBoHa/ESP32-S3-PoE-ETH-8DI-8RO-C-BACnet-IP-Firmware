@@ -14,8 +14,8 @@ the public Internet. This firmware does not implement BACnet/SC.
 
 First boot generates a random 256-bit admin key and stores it in NVS. Native
 USB setup permits downloading it for five minutes during that first boot.
-It is not printed in ordinary logs. Mutation requests use a 60-second, one-use random nonce
-and HMAC-SHA256 over:
+It is not printed in ordinary logs. Mutation requests and command-trace reads
+use a 60-second, one-use random nonce and HMAC-SHA256 over:
 
 ```text
 BACNET-IO-AUTH-V1
@@ -34,6 +34,13 @@ This protocol runs over plain HTTP. It authenticates the command and request
 body but does **not** hide configuration, firmware bytes, addresses, or timing.
 Responses are not authenticated, and an active network attacker can delay an
 otherwise valid signed command. Network isolation remains mandatory.
+
+The authenticated BACnet command trace contains a bounded, RAM-only record of
+raw write APDUs and peer addresses. It is not exposed by the public status or
+configuration endpoints. Trace responses request `Cache-Control: no-store`,
+but the HTTP response remains unencrypted. Protect saved traces like other
+site-specific commissioning evidence. See [command recovery](BACNET_COMMAND_RECOVERY.md#bounded-command-trace-firmware-111-and-newer)
+for scope, retention, and interpretation limits.
 
 Store the key in a dedicated file with mode 0600. Do not pass it directly on a
 command line, place it in source control, send it in tickets/chat, or include it

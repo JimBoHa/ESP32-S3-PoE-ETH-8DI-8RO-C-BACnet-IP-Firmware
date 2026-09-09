@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: 0BSD */
 #include "bip_esp32.h"
+#include "bacnet_command_trace.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -12,6 +13,7 @@
 #include "lwip/inet.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
+#include "esp_timer.h"
 
 #include "bacnet/bacdcode.h"
 #include "bacnet/datalink/bip.h"
@@ -176,7 +178,17 @@ int bip_send_pdu(BACNET_ADDRESS *dest, BACNET_NPDU_DATA *npdu_data,
     } else {
         return -1;
     }
-    return frame_len > 0 ? bip_send_mpdu(&target, frame, (uint16_t)frame_len) : -1;
+    int result = frame_len > 0 ? bip_send_mpdu(&target, frame, (uint16_t)frame_len) : -1;
+    BACNET_ADDRESS destination = {0}, source = {0};
+    BACNET_NPDU_DATA decoded_npdu = {0};
+    int offset = bacnet_npdu_decode(pdu, pdu_len, &destination, &source, &decoded_npdu);
+    if (offset > 0 && (unsigned)offset < pdu_len &&
+        decoded_npdu.protocol_version == BACNET_PROTOCOL_VERSION &&
+        !decoded_npdu.network_layer_message) {
+        bacnet_command_trace_response(dest->mac, dest->mac_len, pdu + offset,
+            pdu_len - offset, (uint64_t)esp_timer_get_time() / 1000U, result);
+    }
+    return result;
 }
 
 uint16_t bip_receive(BACNET_ADDRESS *src, uint8_t *pdu, uint16_t max_pdu, unsigned timeout)

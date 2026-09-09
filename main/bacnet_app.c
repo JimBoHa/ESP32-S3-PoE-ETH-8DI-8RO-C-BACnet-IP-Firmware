@@ -434,6 +434,21 @@ static bool is_discovery_packet(const uint8_t *packet, uint16_t length)
          packet[offset + 1] == SERVICE_UNCONFIRMED_WHO_IS);
 }
 
+static void command_trace_begin(const BACNET_ADDRESS *peer,
+    const uint8_t *packet, uint16_t length, bool processing_enabled)
+{
+    BACNET_ADDRESS destination = {0}, source = {0};
+    BACNET_NPDU_DATA npdu = {0};
+    bacnet_command_trace_end();
+    int offset = bacnet_npdu_decode(packet, length, &destination, &source, &npdu);
+    if (offset > 0 && offset < length &&
+        npdu.protocol_version == BACNET_PROTOCOL_VERSION && !npdu.network_layer_message) {
+        bacnet_command_trace_begin(peer->mac, peer->mac_len, packet + offset,
+            length - offset, (uint64_t)esp_timer_get_time() / 1000U,
+            processing_enabled);
+    }
+}
+
 static void register_service_handlers(void)
 {
     apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_I_AM, handler_instance_i_am);
@@ -578,11 +593,14 @@ static void bacnet_task(void *context)
                 sizeof(s_pdu_buffer), 20);
             xSemaphoreTake(s_object_mutex, portMAX_DELAY);
             if (length) {
+                command_trace_begin(&source, s_pdu_buffer, length,
+                    s_instance.state == INSTANCE_READY);
                 /* Collect discovery while selecting an ID, but do not accept
                    point reads/writes or subscriptions under a provisional ID. */
                 if (s_instance.state == INSTANCE_READY || is_discovery_packet(s_pdu_buffer, length)) {
                     npdu_handler(&source, s_pdu_buffer, length);
                 }
+                bacnet_command_trace_end();
                 s_packet_count++;
             }
 
@@ -707,6 +725,17 @@ const char *bacnet_app_instance_status(void)
 uint32_t bacnet_app_instance_conflicts(void)
 {
     return s_instance_conflicts;
+}
+
+bool bacnet_app_command_trace_get(bacnet_command_trace_snapshot_t *snapshot)
+{
+    if (!snapshot || !s_object_mutex ||
+        xSemaphoreTake(s_object_mutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+        return false;
+    }
+    bacnet_command_trace_snapshot(snapshot);
+    xSemaphoreGive(s_object_mutex);
+    return true;
 }
 
 esp_err_t bacnet_app_relay_command(unsigned index, bacnet_relay_command_t command,
