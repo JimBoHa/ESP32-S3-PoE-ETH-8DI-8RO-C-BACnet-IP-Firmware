@@ -56,3 +56,33 @@ tail -n 2 ../bacnet-io-soak-24h.jsonl
 
 Do not commit site-specific soak logs. They include public configuration and
 network metadata, though never the commissioning key.
+
+## Completed endurance result
+
+The strict v0.13.5 bench run passed from **2026-09-07 04:25:37.709 UTC** to
+**2026-09-08 04:25:38.168 UTC**. Its final JSONL summary reported:
+
+| Measurement | Result |
+|---|---:|
+| Elapsed monitoring time | 86,400.035 seconds |
+| Scheduled / successful samples | 1,441 / 1,441 |
+| Request failures / samples with health alerts | 0 / 0 |
+| Availability | 100% |
+| Unexpected restarts | 0 |
+| Free heap, first / last | 273,008 / 272,984 bytes |
+| Lowest current / historical minimum heap | 272,208 / 266,344 bytes |
+| BACnet latency, mean / p95 / maximum | 3.488 / 4.580 / 5.863 ms |
+| HTTP status / config maximum latency | 17.570 / 22.647 ms |
+| Final `success` / `interrupted` | `true` / `false` |
+
+Relays were expected off, the heap floor was 250,000 bytes, and no firmware,
+partition, configuration, or identity changes were permitted. Raw site-specific
+evidence is retained outside the repository. This is a passing **v0.13.5**
+endurance result; it does not certify later firmware, loaded relay contacts,
+electrically stimulated inputs, or power-fault recovery.
+
+Before monitoring a commissioned controller, agree on the expected relay
+state and a window without planned reboots or configuration changes. An
+intentional BAS command can fail an all-off soak without indicating a firmware
+fault; preserve that evidence and explain the event rather than removing the
+alert or claiming an uninterrupted pass.
