@@ -2,8 +2,24 @@
 
 `tools/soak_monitor.py` records controller health to an append-only JSONL file.
 Each interval it sends a directed BACnet Who-Is and validates the I-Am identity,
-then reads the public HTTP status and configuration endpoints. It does not need
-the admin key and never writes to the controller.
+and independently reads the public HTTP status and configuration endpoints.
+It does not need the admin key and never writes to the controller.
+
+The three probes run concurrently, with one attempt per endpoint and no automatic
+retries. If any probe fails, the interval remains a request failure even when the
+other two succeed. A failed record includes `probe_diagnostics`, with separate
+start/finish timestamps, elapsed time, responses from successful probes, and
+errors from failed probes. A missed I-Am therefore does not prevent HTTP evidence
+from being collected in that sampling window. Successful I-Am results include
+`local_udp_port`; BACnet errors also identify the assigned local UDP port when
+available, for correlation with network evidence.
+
+Partial responses are diagnostic evidence, not a replacement successful sample
+or a new baseline. Their timestamps identify when they were observed; a healthy
+HTTP response does not prove uninterrupted service throughout a BACnet timeout,
+or establish where a missing UDP packet was lost. Earlier recorders sampled
+sequentially and may have no HTTP evidence for a failed BACnet interval. Updating
+the source does not change the code already loaded by a running monitor.
 
 The monitor treats these conditions as failures:
 
@@ -76,9 +92,10 @@ Review an existing log without contacting the controller or modifying the file:
 python tools/review_soak.py ../bacnet-io-soak-24h.jsonl --minimum-duration 86400
 ```
 
-The reviewer applies the current `soak_monitor.py` health checks to every saved
-response and preserves all original alerts and request failures. This is useful
-when the monitor code changes during a long run: an already-running Python
+The reviewer applies the current `soak_monitor.py` health checks to every complete
+saved response and preserves all original alerts and request failures. Failed
+samples remain failed even when they include healthy partial diagnostics. This
+is useful when the monitor code changes during a long run: an already-running Python
 process keeps its loaded rules, but its recorded telemetry can be checked by
 the newer rules without restarting the run. Keep both the original log and the
 offline review; neither replaces the other.
