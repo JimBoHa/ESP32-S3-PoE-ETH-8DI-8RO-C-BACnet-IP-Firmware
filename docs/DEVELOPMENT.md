@@ -33,6 +33,13 @@ require the Node tests, Chromium interaction tests, and a production build;
 USB transport changes also require a physical-controller check. A mock device
 fixture cannot prove Web Serial timing, flash contents, or USB reboot behavior.
 
+Use an up-to-date Python with `tarfile.data_filter` for the host/release tests
+(Python 3.12 or newer includes it). The release collector deliberately uses
+secure archive extraction; an old system Python such as macOS Python 3.9.6
+does not provide that API. Put the supported interpreter's `python3` on `PATH`
+before running the host suite. The ESP-IDF environment may use a different
+Python interpreter.
+
 ```sh
 tests/run_host_tests.sh
 idf.py fullclean
@@ -156,22 +163,49 @@ not a firmware software-reset reason, but the run correctly failed the strict
 zero-failure/zero-reboot gate. Separate burst characterization then showed an
 exact 32-response ceiling in v0.13.2 and motivated the supported maximum of 64
 plus the compile-time and runtime capacity checks in v0.13.5. A fresh strict
-v0.13.5 soak remains the endurance release gate.
+v0.13.5 soak then passed on 2026-09-07 through 2026-09-08 UTC: all 1,441
+scheduled samples completed over 86,400 seconds, with zero request failures,
+health alerts, or restarts. Current free heap changed by -24 bytes and the
+lowest reported historical minimum was 266,344 bytes. See the exact
+[completed endurance result](SOAK_TESTING.md#completed-endurance-result).
+This result belongs to v0.13.5, not to later firmware versions.
+
+Version 1.1.0 was rechecked on 2026-09-09 UTC using BACpypes3 0.0.106:
+56 non-actuating HIL checks passed, with the relay sequence and subscription
+capacity stress test explicitly skipped. Existing BAS subscriptions were
+left in place. The scan covered all 28 objects and 385 RPM property values,
+directed/broadcast discovery, Who-Has, confirmed/unconfirmed COV, health, and
+negative access cases. All eight outputs were inactive with clear priority
+arrays, and the Device instance remained locked. The three C host executables,
+45 Python tests (Python 3.13), 23 Node tests, 22 Chromium interaction tests,
+installer production build, and ESP-IDF 5.5.4 application build also passed.
+This is a finite regression check, not a v1.1.0 endurance or electrical result.
+
+Read-only interoperability inspection also verified an existing Metasys NAE
+9.0.5.7692 mapping to the v1.1.0 controller: all eight Binary Outputs had
+confirmed COV subscriptions, and the two inspected mapped outputs matched
+the remote objects' inactive Present_Value, clear priority arrays, and normal
+health. This verifies retained mappings and live reads/subscriptions, not
+end-to-end command generation, command restoration, or physical contacts.
+ALC and Niagara/Tridium workstation checks remain outstanding.
 
 The DI channels remained inactive because no electrical stimulus or loopback
 fixture was attached. Their BACnet read path and metadata are validated, but
 their optocoupler polarity, debounce timing, and field wiring are not.
 
-Remaining field-only release gates:
+Remaining field/recovery-access gates:
 
 - electrically stimulate every DI and measure polarity and debounce timing;
 - verify every relay contact with a meter, independent of command readback;
 - cold boot, cable loss, brownout, watchdog, and rapid power-cycle behavior;
 - live static-IP switchover with local USB recovery available;
 - failed-startup OTA rollback and corrupt-NVS fallback with recovery access;
-- discovery and point import from representative ALC, Niagara/Tridium, and
-  Metasys clients;
-- complete the documented strict 24-hour v0.13.5 endurance/soak run.
+- discovery and point import from representative ALC and Niagara/Tridium
+  clients, plus Metasys command-source and post-reboot reassertion checks.
+
+A new strict 24-hour run is required to claim endurance validation for a later
+firmware version. The completed v0.13.5 result does not remove that version-
+specific gate.
 
 ## Package
 
