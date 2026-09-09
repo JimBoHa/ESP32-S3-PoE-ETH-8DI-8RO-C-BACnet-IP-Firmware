@@ -28,6 +28,16 @@ python tools/bacnet_hil_test.py \
   --report hardware-report.json
 ```
 
+For a controller already mapped in a BAS, add `--skip-capacity-test` to avoid
+deliberately filling its COV subscription table. The runner normally skips
+capacity testing when existing subscriptions are present, but the explicit
+flag also prevents starting the stress test during a temporary gap in BAS
+subscriptions. It still creates and cancels its own short-lived BI1 COV
+subscriptions. Do not use this suite as a passive production monitor: it
+expects an inactive relay baseline and sends same-value negative write tests
+to read-only Device/BI properties. Use the read-only soak monitor when that
+active protocol testing is inappropriate.
+
 To include physical relay commands, first disconnect every controlled load and
 verify that no automation workstation is commanding the outputs. The runner
 refuses to overwrite a nonempty priority array and always attempts to

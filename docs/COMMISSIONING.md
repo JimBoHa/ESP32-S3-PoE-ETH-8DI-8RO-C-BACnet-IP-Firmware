@@ -1,9 +1,11 @@
 # Commissioning and recovery
 
-Version 0.13.5 has completed the software-visible target-board acceptance
-suite but not the field electrical, destructive recovery, proprietary-client,
-or endurance checks listed in [Development and release](DEVELOPMENT.md). Use a
-bench unit, disconnect relay loads, and preserve a way to restore the
+Version 0.13.5 completed the software-visible target-board acceptance suite
+and a strict 24-hour soak. Version 1.1.0 has newer finite regression and
+Metasys mapping/read/subscription evidence, not a completed version-specific
+endurance result. Field electrical, destructive recovery, and BAS command-
+recovery checks remain as listed in [Development and release](DEVELOPMENT.md).
+Use a bench unit, disconnect relay loads, and preserve a way to restore the
 manufacturer's image if that matters to the site.
 
 ## 1. Verify the target
