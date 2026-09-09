@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: 0BSD */
 #include "config_model.h"
+#include "bacnet_instance.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -170,6 +171,7 @@ void config_model_defaults(firmware_config_t *config)
     }
     memset(config, 0, sizeof(*config));
     config->device_instance = FW_DEFAULT_DEVICE_INSTANCE;
+    config->device_instance_mode = FW_INSTANCE_AUTO_NEW;
     config->bacnet_port = FW_DEFAULT_BACNET_PORT;
     config->vendor_id = FW_DEFAULT_VENDOR_ID;
     config->input_invert_mask = 0xFFU;
@@ -201,6 +203,10 @@ bool config_model_validate(const firmware_config_t *config, char *reason, size_t
     }
     if (config->device_instance > 4194302U) {
         set_reason(reason, reason_size, "device_instance must be 0..4194302");
+        return false;
+    }
+    if (config->device_instance_mode > FW_INSTANCE_AUTO_CHECK_SAVED) {
+        set_reason(reason, reason_size, "invalid device instance mode");
         return false;
     }
     if (config->bacnet_port == 0U) {
@@ -279,4 +285,82 @@ bool config_model_is_valid_blob(const firmware_config_t *config)
         return false;
     }
     return config_model_validate(config, NULL, 0);
+}
+
+bool config_model_instance_auto(const firmware_config_t *config)
+{
+    return config->device_instance_mode != FW_INSTANCE_MANUAL;
+}
+
+bool config_model_instance_pending(const firmware_config_t *config)
+{
+    return config->device_instance_mode == FW_INSTANCE_AUTO_NEW ||
+        config->device_instance_mode == FW_INSTANCE_AUTO_CHECK_SAVED;
+}
+
+bool config_model_migrate_instance_mode(firmware_config_t *config)
+{
+    if (config->device_instance_mode == FW_INSTANCE_AUTO_LOCKED &&
+        (config->device_instance < BACNET_INSTANCE_FIRST || config->device_instance > BACNET_INSTANCE_LAST)) {
+        /* Older firmware preserves the reserved byte when editing an ID. */
+        config->device_instance_mode = FW_INSTANCE_MANUAL;
+        config_model_finalize(config);
+        return true;
+    }
+    if (config->device_instance_mode != FW_INSTANCE_LEGACY) {
+        return false;
+    }
+    /* Preserve deliberately configured legacy IDs. Check the old shared
+       factory ID once, retaining it if free, then lock the result. */
+    config->device_instance_mode = config->device_instance == FW_DEFAULT_DEVICE_INSTANCE ?
+        FW_INSTANCE_AUTO_CHECK_SAVED : FW_INSTANCE_MANUAL;
+    config_model_finalize(config);
+    return true;
+}
+
+bool config_model_assign_instance(firmware_config_t *config,
+    uint32_t expected_revision, uint32_t instance)
+{
+    if (!config_model_instance_pending(config) ||
+        config->database_revision != expected_revision ||
+        instance < BACNET_INSTANCE_FIRST || instance > BACNET_INSTANCE_LAST) {
+        return false;
+    }
+    char default_name[FW_NAME_LEN];
+    snprintf(default_name, sizeof(default_name), "BACnet IO %lu",
+        (unsigned long)config->device_instance);
+    if (strcmp(config->device_name, default_name) == 0) {
+        snprintf(config->device_name, sizeof(config->device_name), "BACnet IO %lu",
+            (unsigned long)instance);
+        if (!object_names_are_unique(config)) {
+            snprintf(config->device_name, sizeof(config->device_name), "%s", default_name);
+        }
+    }
+    config->device_instance = instance;
+    config->device_instance_mode = FW_INSTANCE_AUTO_LOCKED;
+    config->database_revision++;
+    config_model_finalize(config);
+    return true;
+}
+
+bool config_model_instance_options(firmware_config_t *config,
+    bool has_automatic, bool automatic, bool has_instance, uint32_t instance,
+    bool reselect)
+{
+    if (reselect && (!has_automatic || !automatic)) {
+        return false;
+    }
+    if (has_automatic && automatic) {
+        if (reselect || !config_model_instance_auto(config)) {
+            config->device_instance_mode = FW_INSTANCE_AUTO_NEW;
+        }
+        /* An automatic-mode form must not overwrite a newly selected ID
+           with a stale value from before discovery finished. */
+    } else if ((has_automatic && !automatic) || has_instance) {
+        config->device_instance_mode = FW_INSTANCE_MANUAL;
+        if (has_instance) {
+            config->device_instance = instance;
+        }
+    }
+    return true;
 }

@@ -1,6 +1,6 @@
 # BACnet implementation summary
 
-This is an engineering PICS-style summary for firmware 0.13.5. It is not a BTL
+This is an engineering PICS-style summary for firmware 1.1.0. It is not a BTL
 test report, listing, or certification claim.
 
 ## Device and data link
@@ -9,7 +9,7 @@ test report, listing, or certification claim.
 |---|---|
 | Data link | BACnet/IPv4 (Annex J style BVLL) over W5500 Ethernet |
 | Default UDP port | 47808 (`0xBAC0`), persistent configurable |
-| Default Device instance | 599153, persistent configurable |
+| Default Device instance | Automatic 599000–599999, saved and locked; manual override available |
 | Protocol revision | 28 |
 | Maximum APDU | 1476 octets |
 | Segmentation | Not supported |
@@ -22,6 +22,11 @@ test report, listing, or certification claim.
 Broadcast discovery works on the local IP subnet. Cross-subnet discovery needs
 an external BACnet router/BBMD design; the device does not register as a Foreign
 Device.
+
+The firmware initiates local Who-Is discovery and processes I-Am replies for
+[automatic instance assignment and duplicate monitoring](AUTOMATIC_INSTANCE.md).
+It locks a successfully assigned instance before normal point services start.
+Later conflicts are reported without automatically changing that instance.
 
 ## Services executed as server
 

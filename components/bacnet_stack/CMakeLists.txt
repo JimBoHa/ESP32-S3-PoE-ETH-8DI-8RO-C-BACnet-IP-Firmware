@@ -22,6 +22,7 @@ set(BACNET_SOURCES
     "${BACNET_SRC}/bacnet/basic/service/h_whois.c"
     "${BACNET_SRC}/bacnet/basic/service/h_wp.c"
     "${BACNET_SRC}/bacnet/basic/service/s_iam.c"
+    "${BACNET_SRC}/bacnet/basic/service/s_whois.c"
     "${BACNET_SRC}/bacnet/basic/service/s_ihave.c"
     "${BACNET_SRC}/bacnet/basic/sys/days.c"
     "${BACNET_SRC}/bacnet/basic/sys/dst.c"

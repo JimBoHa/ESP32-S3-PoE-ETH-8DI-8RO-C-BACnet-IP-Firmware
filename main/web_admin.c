@@ -177,7 +177,9 @@ static esp_err_t status_handler(httpd_req_t *request)
     cJSON_AddBoolToObject(root, "ethernet_link", ethernet_manager_link_up());
     cJSON_AddBoolToObject(root, "ipv4_assigned", has_ip);
     cJSON_AddBoolToObject(root, "bacnet_running", bacnet_app_running());
-    cJSON_AddNumberToObject(root, "bacnet_device_instance", config.device_instance);
+    cJSON_AddNumberToObject(root, "bacnet_device_instance", bacnet_app_device_instance());
+    cJSON_AddStringToObject(root, "bacnet_instance_status", bacnet_app_instance_status());
+    cJSON_AddNumberToObject(root, "bacnet_instance_conflicts", bacnet_app_instance_conflicts());
     cJSON_AddNumberToObject(root, "bacnet_udp_port", config.bacnet_port);
     cJSON_AddNumberToObject(root, "bacnet_udp_receive_mailbox_size",
         CONFIG_LWIP_UDP_RECVMBOX_SIZE);
@@ -225,6 +227,8 @@ static cJSON *config_to_json(const firmware_config_t *config)
     cJSON_AddNumberToObject(root, "schema", config->schema);
     cJSON_AddNumberToObject(root, "database_revision", config->database_revision);
     cJSON_AddNumberToObject(root, "device_instance", config->device_instance);
+    cJSON_AddBoolToObject(root, "device_instance_auto", config_model_instance_auto(config));
+    cJSON_AddBoolToObject(root, "device_instance_locked", !config_model_instance_pending(config));
     cJSON_AddNumberToObject(root, "bacnet_port", config->bacnet_port);
     cJSON_AddNumberToObject(root, "vendor_id", config->vendor_id);
     cJSON_AddNumberToObject(root, "input_invert_mask", config->input_invert_mask);
@@ -390,9 +394,20 @@ static esp_err_t config_put_handler(httpd_req_t *request)
     firmware_config_t config;
     config_store_get(&config);
     uint32_t number = 0;
+    uint32_t instance = config.device_instance;
+    bool automatic = config_model_instance_auto(&config);
+    bool reselect = false;
     bool valid =
-        json_copy_number(json, "device_instance", 4194302U, &config.device_instance, reason, sizeof(reason)) &&
+        json_copy_number(json, "device_instance", 4194302U, &instance, reason, sizeof(reason)) &&
+        json_copy_bool(json, "device_instance_auto", &automatic, reason, sizeof(reason)) &&
+        json_copy_bool(json, "device_instance_reselect", &reselect, reason, sizeof(reason)) &&
         json_copy_number(json, "bacnet_port", UINT16_MAX, &number, reason, sizeof(reason));
+    if (valid && !config_model_instance_options(&config,
+            cJSON_GetObjectItemCaseSensitive(json, "device_instance_auto") != NULL, automatic,
+            cJSON_GetObjectItemCaseSensitive(json, "device_instance") != NULL, instance, reselect)) {
+        valid = false;
+        snprintf(reason, sizeof(reason), "reselect requires device_instance_auto=true");
+    }
     if (valid && cJSON_GetObjectItemCaseSensitive(json, "bacnet_port")) {
         config.bacnet_port = (uint16_t)number;
     }
@@ -423,6 +438,9 @@ static esp_err_t config_put_handler(httpd_req_t *request)
     }
 
     esp_err_t result = config_store_update(&config);
+    if (result == ESP_ERR_INVALID_STATE) {
+        return send_error(request, "409 Conflict", "Configuration changed; reload and save again");
+    }
     if (result != ESP_OK) {
         return send_error(request, "500 Internal Server Error", esp_err_to_name(result));
     }

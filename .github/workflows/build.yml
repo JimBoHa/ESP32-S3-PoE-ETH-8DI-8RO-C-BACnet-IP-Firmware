@@ -29,6 +29,7 @@ jobs:
           cache-dependency-path: installer/package-lock.json
       - name: Install and test desktop browsers
         working-directory: installer
+        shell: bash
         run: |
           npm ci
           npm test
