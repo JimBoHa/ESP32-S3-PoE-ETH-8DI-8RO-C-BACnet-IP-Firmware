@@ -68,6 +68,54 @@ tail -n 2 ../bacnet-io-soak-24h.jsonl
 Do not commit site-specific soak logs. They include public configuration and
 network metadata, though never the commissioning key.
 
+## Offline review and upgraded health checks
+
+Review an existing log without contacting the controller or modifying the file:
+
+```sh
+python tools/review_soak.py ../bacnet-io-soak-24h.jsonl --minimum-duration 86400
+```
+
+The reviewer applies the current `soak_monitor.py` health checks to every saved
+response and preserves all original alerts and request failures. This is useful
+when the monitor code changes during a long run: an already-running Python
+process keeps its loaded rules, but its recorded telemetry can be checked by
+the newer rules without restarting the run. Keep both the original log and the
+offline review; neither replaces the other.
+
+The JSON result distinguishes `pass`, `fail`, and `incomplete`. Exit codes are
+0 for a complete passing run, 1 for failed evidence, and 2 for a clean unfinished
+run or an unreadable/invalid snapshot (the latter prints an error to stderr).
+A missing final summary never passes, even after the last scheduled sample.
+The `--minimum-duration 86400` gate also prevents a passing short preflight from
+being mistaken for a 24-hour result. Without that option, `pass` refers only to
+the duration planned in that log.
+
+Review checks contiguous sample sequences, elapsed times, the saved baseline
+and target, original summary counts, and the full planned schedule. At most
+1,000,000 scheduled samples are supported. The report fingerprints the captured
+log bytes, reviewer, and health-check source for reproducibility. A live file
+is read only up to its initial byte length; if that ends inside an unflushed
+record, retry after the logger flushes. A clean live snapshot remains
+`incomplete`, not a release pass.
+
+Older recorders may omit the instance-conflict counter from the baseline while
+still recording it in status. The reviewer recovers only that missing field
+from the first response associated with the baseline; it never replaces the
+original firmware, reboot count, identity, or configuration baseline. Modern
+firmware must still supply valid assignment telemetry. Legacy firmware without
+these fields remains supported when the other required baseline telemetry is
+present (verified with v0.13.5 logs). Earlier logs that lack the compiled UDP
+mailbox baseline, such as v0.13.0/v0.13.2, cannot prove the current release gates
+and are rejected rather than filled with assumed values.
+
+Per-sample configuration is stored as a fingerprint and database revision, not
+a second full configuration object. Replay requires both to match the saved
+baseline before treating its configuration as unchanged; changed or missing
+configuration evidence fails review. This does not reconstruct changed values,
+prove log provenance, or detect physical events between samples. A review also
+cannot invent telemetry that an older recorder never captured.
+
 ## Completed endurance result
 
 The strict v0.13.5 bench run passed from **2026-09-07 04:25:37.709 UTC** to
