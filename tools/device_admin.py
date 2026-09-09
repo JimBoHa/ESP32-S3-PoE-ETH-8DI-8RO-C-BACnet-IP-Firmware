@@ -222,6 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=float, default=20.0, help="network timeout in seconds")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("status", help="read device status")
+    commands.add_parser("command-trace", help="read the authenticated BACnet write trace")
     commands.add_parser("config-get", help="read persistent configuration")
 
     config_set = commands.add_parser("config-set", help="save a partial or full JSON configuration")
@@ -255,6 +256,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     key = require_key(args)
+    if args.command == "command-trace":
+        print_json(
+            authenticated_request(
+                base_url,
+                key,
+                "GET",
+                "/api/v1/bacnet/command-trace",
+                b"",
+                content_type="application/octet-stream",
+                timeout=args.timeout,
+            )
+        )
+        return 0
     if args.command == "config-set":
         try:
             config = json.loads(args.file.read_text(encoding="utf-8"))
