@@ -21,6 +21,13 @@ cc -std=c11 -Wall -Wextra -Werror \
 
 cc -std=c11 -Wall -Wextra -Werror \
     -I"$repo_root/main" \
+    "$repo_root/main/bacnet_command_trace.c" \
+    "$repo_root/tests/test_bacnet_command_trace.c" \
+    -o "$test_tmp/test_bacnet_command_trace"
+"$test_tmp/test_bacnet_command_trace"
+
+cc -std=c11 -Wall -Wextra -Werror \
+    -I"$repo_root/main" \
     "$repo_root/main/usb_setup_model.c" \
     "$repo_root/tests/test_usb_setup_model.c" \
     -o "$test_tmp/test_usb_setup_model"

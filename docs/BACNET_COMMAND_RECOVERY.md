@@ -57,6 +57,50 @@ the supervisory engine, and a short outage may not trigger its offline/online
 logic. A current empty array is not a historical packet trace: commands may
 have expired or been relinquished before inspection.
 
+## Bounded command trace (firmware 1.1.1 and newer)
+
+The read-only trace records incoming BACnet WriteProperty (service 15) and
+WritePropertyMultiple (service 16) APDUs, plus matching synchronous
+SimpleACK, Error, Reject, or Abort responses. It does not enable additional
+services or change property access, priority handling, or startup defaults.
+In particular, WritePropertyMultiple remains unsupported.
+
+Reading the trace requires the existing admin key:
+
+```sh
+python tools/device_admin.py --device DEVICE_IP --key-file device.key command-trace
+```
+
+The client signs an empty-body `GET /api/v1/bacnet/command-trace` using the
+normal challenge/HMAC protocol. Missing or invalid authentication is rejected.
+The response uses `Cache-Control: no-store`, but plain HTTP still exposes the
+response to observers on the network. Keep trace captures private: they contain
+peer addresses and raw command data.
+
+Take a snapshot, reproduce one known demand change through its intended BAS
+owner with loads isolated, then read the trace again promptly. A read neither
+commands outputs nor clears the trace. Interpret it with simultaneous point
+and priority-array reads:
+
+| Field / observation | Meaning and limitation |
+|---|---|
+| `write_property_requests`, `write_property_multiple_requests` | Counts of observed request APDUs since boot, including retries and recognizable malformed/segmented attempts. Not counts of accepted writes. |
+| `records` | Last eight receive/transmit events in sequence order. Each event retains at most 96 APDU bytes. Compare `captured_length` with `apdu_length`; a large request can be truncated. |
+| `total_records`, `overwritten_records` | Lifetime event count and count displaced from the bounded ring. A burst can overwrite an earlier request or leave only its response. |
+| `peer` | BACnet/IP transport address, or BVLC forwarded-origin address. A router may stand between this peer and the logical writer; this is not authenticated identity. |
+| `processing_enabled` | Device-instance selection allowed normal NPDU dispatch. It does not prove NPDU routing accepted the destination or a property write succeeded. |
+| `send_result` | `null` for requests; datalink send return value for responses. A nonnegative result is not proof the peer received or acted on the response. |
+| `apdu_hex` | Raw APDU bytes for decoding the requested object, property, value, priority, or protocol error. Requests and responses share the invoke ID and peer within one synchronous dispatch. |
+| No new recorded request | No recognizable write APDU reached this recorder during the observation. It cannot distinguish no sender attempt from network loss, invalid BVLC/NPDU framing, or a command sent elsewhere. |
+| ACK paired with a write, but output still Off | Read the actual priority array, winning priority, reliability, and successful expander-write mask. An ACK alone is not contact feedback. |
+
+Storage is RAM-only and resets on reboot. `sequence` and `uptime_ms` are local
+to that boot; record the management status/reboot count alongside a capture.
+This is not a packet capture, durable audit log, or record of HTTP/USB relay
+commands. It excludes BACnet reads, COV traffic, invalid frames rejected before
+APDU dispatch, and responses outside the current request's synchronous handler.
+There is no network endpoint to clear or persist the recorder.
+
 ## Metasys-specific checks
 
 The ADS/ADX server address may differ from the NAE that owns the integration.
