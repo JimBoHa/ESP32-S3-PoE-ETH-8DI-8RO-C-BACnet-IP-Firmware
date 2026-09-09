@@ -38,6 +38,11 @@ partition. Status and configuration JSON links support read-only inspection.
 
 ## Configuration
 
+Firmware 1.1.0 adds automatic 599xxx instance assignment with a persistent lock,
+manual override, and **Run automatic assignment again**. Follow the
+[illustrated instance-assignment guide](AUTOMATIC_INSTANCE.md). The screenshots
+below show the earlier 1.0.0 layout for the other configuration fields.
+
 Set the BACnet device instance, UDP port, device name, hostname, vendor fields,
 and location. Device instances and network settings must fit the site's BAS
 plan. DHCP is enabled by default; disabling it enables the static IPv4 fields.

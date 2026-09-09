@@ -35,12 +35,15 @@
 #include "bacnet/basic/service/h_whois.h"
 #include "bacnet/basic/service/h_wp.h"
 #include "bacnet/basic/service/s_iam.h"
+#include "bacnet/basic/service/s_whois.h"
 #include "bacnet/basic/tsm/tsm.h"
 #include "bacnet/cov.h"
 #include "bacnet/datalink/bip.h"
 #include "bacnet/npdu.h"
+#include "bacnet/iam.h"
 
 #include "bip_esp32.h"
+#include "bacnet_instance.h"
 #include "board_io.h"
 #include "config_store.h"
 #include "ethernet_manager.h"
@@ -61,6 +64,10 @@ static const char *TAG = "bacnet";
 static firmware_config_t s_config;
 static volatile bool s_running;
 static volatile uint32_t s_packet_count;
+static bacnet_instance_t s_instance;
+static volatile uint32_t s_active_instance;
+static const char *volatile s_instance_status = "waiting-for-network";
+static volatile uint32_t s_instance_conflicts;
 static uint8_t s_pdu_buffer[BIP_MPDU_MAX];
 static SemaphoreHandle_t s_start_signal;
 static SemaphoreHandle_t s_object_mutex;
@@ -377,6 +384,9 @@ static bool initialize_objects(void)
 static void handler_who_is_compatible(
     uint8_t *service_request, uint16_t service_len, BACNET_ADDRESS *source)
 {
+    if (s_instance.state != INSTANCE_READY && s_instance.state != INSTANCE_CLAIMING) {
+        return;
+    }
     if (bip_esp32_last_receive_was_broadcast()) {
         handler_who_is(service_request, service_len, source);
     } else {
@@ -384,8 +394,49 @@ static void handler_who_is_compatible(
     }
 }
 
+static uint64_t instance_address_key(const BACNET_ADDRESS *address)
+{
+    uint64_t key = 14695981039346656037ULL;
+    for (unsigned i = 0; i < address->mac_len; i++) {
+        key = (key ^ address->mac[i]) * 1099511628211ULL;
+    }
+    key = (key ^ address->net) * 1099511628211ULL;
+    for (unsigned i = 0; i < address->len; i++) {
+        key = (key ^ address->adr[i]) * 1099511628211ULL;
+    }
+    return key;
+}
+
+static void handler_instance_i_am(uint8_t *request, uint16_t length,
+    BACNET_ADDRESS *source)
+{
+    uint32_t instance;
+    unsigned max_apdu;
+    int segmentation;
+    uint16_t vendor;
+    if (bacnet_iam_request_decode(request, length, &instance,
+            &max_apdu, &segmentation, &vendor) != length) {
+        return;
+    }
+    bacnet_instance_observe(&s_instance, instance, instance_address_key(source),
+        (uint64_t)esp_timer_get_time() / 1000U);
+}
+
+static bool is_discovery_packet(const uint8_t *packet, uint16_t length)
+{
+    BACNET_ADDRESS destination = {0}, source = {0};
+    BACNET_NPDU_DATA npdu = {0};
+    int offset = bacnet_npdu_decode(packet, length, &destination, &source, &npdu);
+    return offset > 0 && offset + 2 <= length &&
+        npdu.protocol_version == BACNET_PROTOCOL_VERSION && !npdu.network_layer_message &&
+        packet[offset] == PDU_TYPE_UNCONFIRMED_SERVICE_REQUEST &&
+        (packet[offset + 1] == SERVICE_UNCONFIRMED_I_AM ||
+         packet[offset + 1] == SERVICE_UNCONFIRMED_WHO_IS);
+}
+
 static void register_service_handlers(void)
 {
+    apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_I_AM, handler_instance_i_am);
     apdu_set_unrecognized_service_handler_handler(handler_unrecognized_service);
     apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_WHO_IS,
         handler_who_is_compatible);
@@ -503,15 +554,21 @@ static void bacnet_task(void *context)
         }
         int64_t last_timer_us = esp_timer_get_time();
         int64_t last_second_us = last_timer_us;
+        BACNET_ADDRESS own_address = {0};
+        bip_get_my_address(&own_address);
+        uint8_t mac[6];
+        ethernet_manager_mac_get(mac);
+        uint32_t seed = 2166136261U;
+        for (unsigned i = 0; i < sizeof(mac); i++) {
+            seed = (seed ^ mac[i]) * 16777619U;
+        }
+        uint32_t preferred = s_config.device_instance_mode == FW_INSTANCE_AUTO_NEW ?
+            BACNET_INSTANCE_NONE : s_config.device_instance;
+        bacnet_instance_start(&s_instance, config_model_instance_pending(&s_config),
+            preferred, seed, instance_address_key(&own_address), (uint64_t)last_timer_us / 1000U);
         xSemaphoreTake(s_object_mutex, portMAX_DELAY);
         update_binary_objects();
         update_analog_status_objects();
-        xSemaphoreGive(s_object_mutex);
-        s_running = true;
-        ESP_LOGI(TAG, "BACnet/IP Device %lu listening on UDP %u",
-            (unsigned long)s_config.device_instance, s_config.bacnet_port);
-        xSemaphoreTake(s_object_mutex, portMAX_DELAY);
-        Send_I_Am(&Handler_Transmit_Buffer[0]);
         xSemaphoreGive(s_object_mutex);
 
         while (ethernet_manager_has_ip() &&
@@ -521,11 +578,54 @@ static void bacnet_task(void *context)
                 sizeof(s_pdu_buffer), 20);
             xSemaphoreTake(s_object_mutex, portMAX_DELAY);
             if (length) {
-                npdu_handler(&source, s_pdu_buffer, length);
+                /* Collect discovery while selecting an ID, but do not accept
+                   point reads/writes or subscriptions under a provisional ID. */
+                if (s_instance.state == INSTANCE_READY || is_discovery_packet(s_pdu_buffer, length)) {
+                    npdu_handler(&source, s_pdu_buffer, length);
+                }
                 s_packet_count++;
             }
 
             int64_t now_us = esp_timer_get_time();
+            uint64_t now_ms = (uint64_t)now_us / 1000U;
+            unsigned actions = bacnet_instance_tick(&s_instance, now_ms);
+            if (actions & INSTANCE_QUERY) {
+                int32_t low = s_instance.state == INSTANCE_DISCOVERING ?
+                    BACNET_INSTANCE_FIRST : s_instance.candidate;
+                int32_t high = s_instance.state == INSTANCE_DISCOVERING ?
+                    BACNET_INSTANCE_LAST : s_instance.candidate;
+                Send_WhoIs_Local(low, high);
+            }
+            if (actions & INSTANCE_ANNOUNCE) {
+                (void)Device_Set_Object_Instance_Number(s_instance.candidate);
+                Send_I_Am(&Handler_Transmit_Buffer[0]);
+            }
+            if (actions & INSTANCE_SAVE) {
+                firmware_config_t saved;
+                esp_err_t result = config_store_assign_instance(s_config.database_revision,
+                    s_instance.candidate, &saved);
+                if (result == ESP_OK) {
+                    s_config = saved;
+                    (void)Device_Set_Object_Instance_Number(s_config.device_instance);
+                    (void)Device_Object_Name_ANSI_Init(s_config.device_name);
+                    Device_Set_Database_Revision(s_config.database_revision);
+                    s_active_instance = s_config.device_instance;
+                } else {
+                    ESP_LOGE(TAG, "Automatic instance could not be saved: %s", esp_err_to_name(result));
+                }
+                bacnet_instance_saved(&s_instance, result == ESP_OK, now_ms);
+                if (result == ESP_ERR_INVALID_STATE) {
+                    s_instance.state = INSTANCE_CONFIG_CHANGED;
+                }
+            }
+            if (s_instance.state == INSTANCE_READY && !s_running) {
+                s_running = true;
+                Send_I_Am(&Handler_Transmit_Buffer[0]);
+                ESP_LOGI(TAG, "BACnet/IP Device %lu locked; listening on UDP %u",
+                    (unsigned long)s_config.device_instance, s_config.bacnet_port);
+            }
+            s_instance_status = bacnet_instance_state_name(&s_instance);
+            s_instance_conflicts = s_instance.conflicts;
             uint32_t elapsed_ms = (uint32_t)((now_us - last_timer_us) / 1000LL);
             if (elapsed_ms) {
                 tsm_timer_milliseconds(elapsed_ms);
@@ -545,6 +645,7 @@ static void bacnet_task(void *context)
         }
 
         s_running = false;
+        s_instance_status = "waiting-for-network";
         bip_cleanup();
         ESP_LOGW(TAG, "BACnet/IP paused until IPv4 returns");
     }
@@ -556,6 +657,7 @@ esp_err_t bacnet_app_start(const firmware_config_t *config)
         return ESP_ERR_INVALID_ARG;
     }
     s_config = *config;
+    s_active_instance = config->device_instance;
     s_object_mutex = xSemaphoreCreateMutex();
     if (!s_object_mutex) {
         return ESP_ERR_NO_MEM;
@@ -590,6 +692,21 @@ bool bacnet_app_running(void)
 uint32_t bacnet_app_packet_count(void)
 {
     return s_packet_count;
+}
+
+uint32_t bacnet_app_device_instance(void)
+{
+    return s_active_instance;
+}
+
+const char *bacnet_app_instance_status(void)
+{
+    return s_instance_status;
+}
+
+uint32_t bacnet_app_instance_conflicts(void)
+{
+    return s_instance_conflicts;
 }
 
 esp_err_t bacnet_app_relay_command(unsigned index, bacnet_relay_command_t command,

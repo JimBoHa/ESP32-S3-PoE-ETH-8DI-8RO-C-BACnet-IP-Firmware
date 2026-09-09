@@ -77,6 +77,12 @@ esp_err_t config_store_init(void)
             config_model_is_valid_blob(&s_config);
     }
 
+    if (loaded && config_model_migrate_instance_mode(&s_config)) {
+        result = write_config_blob(&s_config);
+        if (result != ESP_OK) {
+            return result;
+        }
+    }
     if (!loaded) {
         config_model_defaults(&s_config);
         result = write_config_blob(&s_config);
@@ -116,11 +122,35 @@ esp_err_t config_store_update(const firmware_config_t *config)
         return ESP_ERR_INVALID_ARG;
     }
     xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (candidate.database_revision != s_config.database_revision) {
+        xSemaphoreGive(s_mutex);
+        return ESP_ERR_INVALID_STATE;
+    }
     candidate.database_revision = s_config.database_revision + 1U;
     config_model_finalize(&candidate);
     esp_err_t result = write_config_blob(&candidate);
     if (result == ESP_OK) {
         s_config = candidate;
+    }
+    xSemaphoreGive(s_mutex);
+    return result;
+}
+
+esp_err_t config_store_assign_instance(uint32_t expected_revision,
+    uint32_t instance, firmware_config_t *saved)
+{
+    if (!s_mutex || !saved) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    firmware_config_t candidate = s_config;
+    esp_err_t result = ESP_ERR_INVALID_STATE;
+    if (config_model_assign_instance(&candidate, expected_revision, instance)) {
+        result = write_config_blob(&candidate);
+        if (result == ESP_OK) {
+            s_config = candidate;
+            *saved = candidate;
+        }
     }
     xSemaphoreGive(s_mutex);
     return result;

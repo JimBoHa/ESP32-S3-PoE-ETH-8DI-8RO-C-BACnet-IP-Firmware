@@ -83,11 +83,17 @@ automation/management network.
 
 ## 6. Apply site configuration
 
+For automatic commissioning, wait for **Locked across reboots** on the
+**BACnet & Status** page before adopting the controller in the BAS. See
+[automatic instance assignment](AUTOMATIC_INSTANCE.md) for manual override,
+explicit reassignment, upgrade behavior, and discovery limits.
+
 Create a partial JSON file. For a static address on the example subnet:
 
 ```json
 {
   "device_instance": 599153,
+  "device_instance_auto": false,
   "hostname": "bacnet-io-599153",
   "device_name": "BACnet IO 599153",
   "location": "Uncommissioned",

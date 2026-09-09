@@ -3,6 +3,7 @@ idf_component_register(
         "app_main.c"
         "auth.c"
         "bacnet_app.c"
+        "bacnet_instance.c"
         "bip_esp32.c"
         "board_io.c"
         "config_model.c"

@@ -49,6 +49,9 @@ for the distinction between browser tests and physical USB validation.
 ## Features
 
 - BACnet/IP over the onboard W5500, UDP port 47808 by default.
+- Automatic discovery chooses a free 599xxx Device instance and locks it across
+  reboots. Manual override and duplicate warnings remain available in the web UI.
+  See [automatic instance assignment](docs/AUTOMATIC_INSTANCE.md).
 - A build-enforced, runtime-visible 64-datagram UDP receive mailbox for
   bursty discovery and point scans.
 - DHCP by default, with persistent static IPv4 configuration available.
@@ -74,7 +77,7 @@ for the distinction between browser tests and physical USB validation.
 
 | Object | Instances | Meaning | BACnet write access |
 |---|---:|---|---|
-| Device | 599153 default | Identity, services, revision, location | None; configure through authenticated API |
+| Device | Automatic 599000–599999, or manual | Identity, services, revision, location | None; configure through authenticated API |
 | Binary Input | 1-8 | DI1-DI8 debounced input state | None |
 | Binary Output | 1-8 | RO1-RO8 commanded relay state | Present_Value, priorities 1-16 |
 | Binary Input | 1001 | Ethernet physical link | None |
@@ -207,7 +210,8 @@ python tools/device_admin.py \
   reboot --yes
 ```
 
-Configurable fields are `device_instance`, `bacnet_port`, `vendor_id`,
+Configurable fields are `device_instance`, `device_instance_auto`,
+`device_instance_reselect`, `bacnet_port`, `vendor_id`,
 `vendor_name`, `input_invert_mask`, `dhcp_enabled`, `restore_relay_state`,
 `hostname`, `device_name`, `location`, the four static IPv4 strings, and the
 eight-element `input_names` and `relay_names` arrays.
