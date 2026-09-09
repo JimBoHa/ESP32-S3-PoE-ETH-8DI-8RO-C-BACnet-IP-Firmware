@@ -23,6 +23,20 @@ from tools.device_admin import (
 
 
 class DeviceAdminTests(unittest.TestCase):
+    def test_command_trace_uses_authenticated_empty_get(self) -> None:
+        with patch("tools.device_admin.require_key", return_value=bytes(range(32))), \
+             patch("tools.device_admin.authenticated_request", return_value={"records": []}) as request, \
+             patch("tools.device_admin.print_json"):
+            self.assertEqual(device_admin.main(["--device", "192.0.2.8", "command-trace"]), 0)
+        self.assertEqual(request.call_args.args[2:5], ("GET", "/api/v1/bacnet/command-trace", b""))
+
+    def test_command_trace_requires_key(self) -> None:
+        with patch("tools.device_admin.require_key", side_effect=AdminError("missing key")), \
+             patch("tools.device_admin.authenticated_request") as request:
+            with self.assertRaisesRegex(AdminError, "missing key"):
+                device_admin.main(["--device", "192.0.2.8", "command-trace"])
+        request.assert_not_called()
+
     def test_canonical_request_and_signature(self) -> None:
         body = b'{"dhcp_enabled":true}'
         canonical = canonical_request(

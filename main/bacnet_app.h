@@ -6,6 +6,7 @@
 
 #include "esp_err.h"
 #include "config_model.h"
+#include "bacnet_command_trace.h"
 
 esp_err_t bacnet_app_start(const firmware_config_t *config);
 bool bacnet_app_running(void);
@@ -13,6 +14,7 @@ uint32_t bacnet_app_packet_count(void);
 uint32_t bacnet_app_device_instance(void);
 const char *bacnet_app_instance_status(void);
 uint32_t bacnet_app_instance_conflicts(void);
+bool bacnet_app_command_trace_get(bacnet_command_trace_snapshot_t *snapshot);
 
 typedef enum {
     BACNET_RELAY_COMMAND_OFF = 0,

@@ -146,7 +146,7 @@ persistent configuration. The Configuration and Firmware tabs provide the
 repository's full management feature set.
 
 Status and configuration reads are public. Relay commands, configuration
-writes, OTA, and reboot require the first-boot admin key. The page signs each
+writes, command-trace reads, OTA, and reboot require the first-boot admin key. The page signs each
 mutation locally and does not send or store the key. Relay commands use the
 BACnet Binary Output priority array (priority 8 by default); `Release` clears
 the selected slot instead of bypassing BACnet state.
@@ -173,6 +173,16 @@ Public read-only calls:
 python tools/device_admin.py --device 192.168.75.153 status
 python tools/device_admin.py --device 192.168.75.153 config-get
 ```
+
+Firmware 1.1.1 adds a bounded, authenticated BACnet write-request/response
+trace for [command-recovery diagnosis](docs/BACNET_COMMAND_RECOVERY.md#bounded-command-trace-firmware-111-and-newer):
+
+```sh
+python tools/device_admin.py --device DEVICE_IP --key-file device.key command-trace
+```
+
+This reads recent evidence only; it does not reissue commands or restore relay
+state. Keep captures private and read the documented retention limits.
 
 Command or relinquish one output through the same authenticated BACnet priority
 path used by the web page:
