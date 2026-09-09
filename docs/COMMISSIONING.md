@@ -154,8 +154,11 @@ python tools/device_admin.py --device DEVICE_IP --key-file device.key \
 
 The connection closes during reboot. Wait for the normal boot interval, query
 status, confirm the firmware version/running partition, and repeat a BACnet
-read. If the new image fails its core startup checks, the bootloader returns to
-the prior slot.
+read. Configuration persistence does not imply command persistence: priority
+arrays restart empty and outputs default off. Verify the intended BAS command
+source reasserts current demand; use the [command recovery checklist](BACNET_COMMAND_RECOVERY.md)
+before enabling optional local relay restoration. If the new image fails its
+core startup checks, the bootloader returns to the prior slot.
 
 ## Recovery
 

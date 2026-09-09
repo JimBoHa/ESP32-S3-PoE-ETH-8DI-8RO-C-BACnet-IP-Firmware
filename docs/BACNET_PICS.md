@@ -157,11 +157,16 @@ hostname applied at boot.
 ## Persistence
 
 Configuration changes are stored in NVS with schema, size, and CRC checks.
-Output commands and priority arrays are not normally retained across a power
-cycle: safe default is all relays off. If `restore_relay_state` is explicitly
-enabled, the effective physical mask is saved after five stable seconds and
-used as the next boot's relinquish default.
+Priority arrays are volatile across every restart: the safe default is all
+relays off. If `restore_relay_state` is explicitly enabled, the effective
+expander output mask is saved after five stable seconds and used as the next
+boot's relinquish default; original command priorities are not restored.
 
 Enable relay restore only when the process has been reviewed for automatic
 re-energization after an outage. It also increases NVS writes when relay states
 remain changed for at least five seconds.
+
+Disabling restore does not erase its saved mask, so re-enabling can revive a
+stale state. Startup still clears the outputs before restoration. See
+[command recovery](BACNET_COMMAND_RECOVERY.md) for the distinction between
+persistent mappings, BAS command reassertion, and this optional local policy.
