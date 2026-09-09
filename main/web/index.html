@@ -280,6 +280,7 @@
         <article class="card">
           <h3>BACnet identity</h3>
           <div class="metric"><span>Device instance</span><strong id="sInstance">—</strong></div>
+          <div class="metric"><span>Instance assignment</span><strong id="sInstanceStatus">—</strong></div>
           <div class="metric"><span>Device name</span><strong id="sDeviceName">—</strong></div>
           <div class="metric"><span>Vendor</span><strong id="sVendor">—</strong></div>
           <div class="metric"><span>Location</span><strong id="sLocation">—</strong></div>
@@ -315,7 +316,9 @@
       <p class="panel-intro">Saved changes are CRC-protected in NVS and take effect after reboot.</p>
       <form id="configForm">
         <div class="form-grid">
+          <label class="wide"><span><input id="cInstanceAuto" type="checkbox">Automatically choose a free 599xxx instance, then lock it</span><small>Checks responding BACnet/IP devices before assigning 599000–599999. The saved ID stays fixed across reboots and later conflicts. Uncheck to enter an instance manually.</small></label>
           <label>Device instance<input id="cDeviceInstance" type="number" min="0" max="4194302" required></label>
+          <div><button id="cNewInstance" type="button" class="action">Run automatic assignment again</button><p id="cInstanceNote" class="note">—</p></div>
           <label>BACnet UDP port<input id="cBacnetPort" type="number" min="1" max="65535" required></label>
           <label>Device name<input id="cDeviceName" maxlength="47" required></label>
           <label>Hostname<input id="cHostname" maxlength="31" required></label>
@@ -382,6 +385,8 @@
   const relayCount = 8;
   let latestStatus = null;
   let latestConfig = null;
+  let newInstanceRequested = false;
+  let configDirty = false;
   let toastTimer = 0;
   let polling = false;
   let cryptoReady = false;
@@ -549,6 +554,18 @@
     $('sUdpMailbox').textContent = `${status.bacnet_udp_receive_mailbox_size} datagrams`;
     $('sPackets').textContent = Number(status.bacnet_packets_received).toLocaleString();
     $('sInstance').textContent = status.bacnet_device_instance;
+    const instanceStates = {
+      'waiting-for-network': 'Waiting for network',
+      discovering: 'Discovering occupied instances',
+      'checking-candidate': 'Checking candidate instance',
+      saving: 'Saving instance',
+      locked: 'Locked across reboots',
+      'locked-conflict': 'Duplicate detected — instance stays locked',
+      'range-full': 'No free 599xxx instance — retrying',
+      'save-failed': 'Could not save instance — BACnet paused',
+      'reboot-required': 'Configuration changed — reboot required'
+    };
+    $('sInstanceStatus').textContent = instanceStates[status.bacnet_instance_status] || 'Manually configured';
     $('sRelayHealth').textContent = boolText(status.relay_controller_healthy, 'Healthy', 'Fault');
     $('sRtc').textContent = boolText(status.rtc_present, 'Present', 'Not detected');
     $('sUptime').textContent = formatUptime(status.uptime_seconds);
@@ -572,6 +589,9 @@
     $('sLocation').textContent = config.location || '—';
     $('sDbRevision').textContent = config.database_revision;
     if (!fillForm) return;
+    newInstanceRequested = false;
+    configDirty = false;
+    $('cInstanceAuto').checked = !!config.device_instance_auto;
     $('cDeviceInstance').value = config.device_instance;
     $('cBacnetPort').value = config.bacnet_port;
     $('cDeviceName').value = config.device_name;
@@ -591,6 +611,7 @@
       $(`cRelayName${i}`).value = config.relay_names[i];
     }
     updateDhcpFields();
+    updateInstanceFields();
   }
 
   async function poll() {
@@ -602,6 +623,9 @@
       if (!latestConfig) {
         const config = await responseJson(await fetch('/api/v1/config', {cache:'no-store'}));
         renderConfig(config, true);
+      } else if (latestConfig.device_instance_auto && !latestConfig.device_instance_locked &&
+                 ['locked', 'locked-conflict'].includes(status.bacnet_instance_status)) {
+        await loadConfig(!configDirty);
       }
     } catch (error) {
       setConnected(false, `Cannot reach device: ${error.message}`);
@@ -642,7 +666,9 @@
       relayNames.push($(`cRelayName${i}`).value);
     }
     return {
-      device_instance: Number($('cDeviceInstance').value),
+      device_instance_auto: $('cInstanceAuto').checked,
+      device_instance_reselect: $('cInstanceAuto').checked && newInstanceRequested,
+      ...(!$('cInstanceAuto').checked ? {device_instance: Number($('cDeviceInstance').value)} : {}),
       bacnet_port: Number($('cBacnetPort').value),
       vendor_id: Number($('cVendorId').value),
       input_invert_mask: invertMask,
@@ -736,6 +762,15 @@
     const disabled = $('cDhcp').checked;
     document.querySelectorAll('.static-ip').forEach(input => input.disabled = disabled);
   }
+
+  function updateInstanceFields() {
+    const automatic = $('cInstanceAuto').checked;
+    $('cDeviceInstance').disabled = automatic;
+    $('cInstanceNote').textContent = !automatic ? 'Manual instance: saved unchanged across reboots.' :
+      newInstanceRequested || !latestConfig?.device_instance_auto ? 'An ID will be selected after Save and Reboot. Update any existing BAS mapping afterward.' :
+      latestConfig?.device_instance_locked ? 'Current automatic instance is locked. Later duplicates raise a warning without changing it.' :
+      'Automatic assignment is pending. Offline or unreachable devices cannot be checked.';
+  }
   function setAuthControls(enabled) { document.querySelectorAll('.auth-action').forEach(button => button.disabled = !enabled); }
   function updateAuthState() { setAuthControls(cryptoReady && /^[0-9a-fA-F]{64}$/.test($('adminKey').value.trim())); }
 
@@ -799,6 +834,14 @@
   $('allOff').addEventListener('click', () => bulkRelay('off').catch(error => notify(error.message, true)));
   $('releaseAll').addEventListener('click', () => bulkRelay('relinquish').catch(error => notify(error.message, true)));
   $('cDhcp').addEventListener('change', updateDhcpFields);
+  $('cInstanceAuto').addEventListener('change', updateInstanceFields);
+  $('cNewInstance').addEventListener('click', () => {
+    newInstanceRequested = true;
+    configDirty = true;
+    $('cInstanceAuto').checked = true;
+    updateInstanceFields();
+  });
+  $('configForm').addEventListener('input', () => { configDirty = true; });
   $('reloadConfig').addEventListener('click', () => loadConfig(true).catch(error => notify(error.message, true)));
   $('configForm').addEventListener('submit', saveConfiguration);
   $('rebootConfig').addEventListener('click', rebootDevice);
