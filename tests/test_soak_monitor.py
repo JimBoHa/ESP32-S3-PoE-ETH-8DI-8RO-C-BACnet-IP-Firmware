@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import socket
 import tempfile
+import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from tools import soak_monitor
+from tools import review_soak, soak_monitor
 
 
 I_AM = bytes.fromhex(
@@ -80,7 +82,160 @@ def instance_health_values(
     return status, config
 
 
+def probe_args() -> argparse.Namespace:
+    return argparse.Namespace(
+        device_address="192.168.75.154", device_instance=599153,
+        bacnet_port=47808, timeout=0.1,
+    )
+
+
 class SoakMonitorTests(unittest.TestCase):
+    def test_http_probes_use_independent_direct_openers(self) -> None:
+        first, second = MagicMock(), MagicMock()
+        for opener in (first, second):
+            opener.open.return_value.__enter__.return_value.read.return_value = b'{"healthy":true}'
+        with patch.object(soak_monitor, "build_opener", side_effect=[first, second]) as factory, \
+             patch.object(soak_monitor, "ProxyHandler") as proxy:
+            for endpoint in ("/api/v1/status", "/api/v1/config"):
+                value, _latency = soak_monitor.fetch_json("192.168.75.154", endpoint, 1)
+                self.assertEqual(value, {"healthy": True})
+        self.assertEqual(factory.call_count, 2)
+        self.assertEqual(proxy.call_count, 2)
+        for call in proxy.call_args_list:
+            self.assertEqual(call.args, ({},))
+        first.open.assert_called_once()
+        second.open.assert_called_once()
+
+    def test_bacnet_probe_records_local_udp_port(self) -> None:
+        with patch.object(soak_monitor.socket, "socket") as factory:
+            client = factory.return_value.__enter__.return_value
+            client.getsockname.return_value = ("0.0.0.0", 55123)
+            client.recvfrom.return_value = (I_AM, ("192.168.75.154", 47808))
+            result = soak_monitor.probe_bacnet("192.168.75.154", 599153, 47808, 1)
+            self.assertEqual(result["local_udp_port"], 55123)
+            self.assertEqual(result["source"], "192.168.75.154:47808")
+            client.sendto.assert_called_once()
+
+    def test_bacnet_failures_keep_local_udp_port_without_retry(self) -> None:
+        for failure in (socket.timeout(), OSError("receive failed"), "malformed", "wrong-source"):
+            with self.subTest(failure=failure), patch.object(soak_monitor.socket, "socket") as factory:
+                client = factory.return_value.__enter__.return_value
+                client.getsockname.return_value = ("0.0.0.0", 55123)
+                if isinstance(failure, Exception):
+                    client.recvfrom.side_effect = failure
+                else:
+                    packet = I_AM[:-1] if failure == "malformed" else I_AM
+                    client.recvfrom.return_value = (packet, ("192.168.75.155", 47808))
+                with self.assertRaisesRegex(soak_monitor.SoakError, "local UDP port 55123"):
+                    soak_monitor.probe_bacnet("192.168.75.154", 599153, 47808, 1)
+                client.sendto.assert_called_once()
+
+    def test_bacnet_deadline_keeps_local_udp_port(self) -> None:
+        with patch.object(soak_monitor.socket, "socket") as factory, \
+             patch.object(soak_monitor.time, "monotonic", side_effect=[0.0, 2.0]):
+            client = factory.return_value.__enter__.return_value
+            client.getsockname.return_value = ("0.0.0.0", 55123)
+            with self.assertRaisesRegex(soak_monitor.SoakError, "timed out.*local UDP port 55123"):
+                soak_monitor.probe_bacnet("192.168.75.154", 599153, 47808, 1)
+            client.recvfrom.assert_not_called()
+            client.sendto.assert_called_once()
+
+    def test_sample_probes_run_concurrently(self) -> None:
+        barrier = threading.Barrier(3)
+        response = dict(bacnet_response(), latency_ms=1.0)
+
+        def bacnet(*_args):
+            barrier.wait(timeout=5)
+            return response
+
+        def http(_address, path, _timeout):
+            barrier.wait(timeout=5)
+            return (healthy_status(), 2.0) if path.endswith("status") else (healthy_config(), 3.0)
+
+        with patch.object(soak_monitor, "probe_bacnet", side_effect=bacnet) as bacnet_mock, \
+             patch.object(soak_monitor, "fetch_json", side_effect=http) as http_mock:
+            result = soak_monitor.take_sample(probe_args())
+        self.assertEqual(result, (healthy_status(), healthy_config(), response, 2.0, 3.0))
+        self.assertEqual(bacnet_mock.call_count, 1)
+        self.assertEqual(http_mock.call_count, 2)
+
+    def test_partial_failures_preserve_all_independent_probe_results(self) -> None:
+        for failed in ({"bacnet"}, {"http_status"}, {"http_config"},
+                       {"bacnet", "http_status", "http_config"}):
+            with self.subTest(failed=failed):
+                def bacnet(*_args):
+                    if "bacnet" in failed:
+                        raise soak_monitor.SoakError("I-Am timed out (local UDP port 55123)")
+                    return dict(bacnet_response(), latency_ms=1.0)
+
+                def http(_address, path, _timeout):
+                    name = "http_status" if path.endswith("status") else "http_config"
+                    if name in failed:
+                        raise soak_monitor.SoakError("HTTP request failed")
+                    return (healthy_status(), 2.0) if name == "http_status" else (healthy_config(), 3.0)
+
+                with patch.object(soak_monitor, "probe_bacnet", side_effect=bacnet) as bacnet_mock, \
+                     patch.object(soak_monitor, "fetch_json", side_effect=http) as http_mock:
+                    with self.assertRaises(soak_monitor.SampleError) as caught:
+                        soak_monitor.take_sample(probe_args())
+                diagnostics = caught.exception.diagnostics
+                self.assertEqual(set(diagnostics), {"bacnet", "http_status", "http_config"})
+                self.assertEqual({name for name, entry in diagnostics.items() if not entry["ok"]}, failed)
+                self.assertEqual(bacnet_mock.call_count, 1)
+                self.assertEqual(http_mock.call_count, 2)
+                for name, entry in diagnostics.items():
+                    self.assertTrue(entry["started_at"].endswith("Z"))
+                    self.assertTrue(entry["finished_at"].endswith("Z"))
+                    self.assertGreaterEqual(entry["elapsed_ms"], 0)
+                    self.assertIn("error" if name in failed else "response", entry)
+                if "http_status" not in failed:
+                    self.assertEqual(diagnostics["http_status"]["response"], healthy_status())
+                if "http_config" not in failed:
+                    self.assertEqual(diagnostics["http_config"]["response"], healthy_config())
+
+    def test_failed_round_is_logged_once_and_still_fails_offline_review(self) -> None:
+        for failed in ({"bacnet"}, {"http_status"}, {"http_config"},
+                       {"bacnet", "http_status", "http_config"}):
+            with self.subTest(failed=failed), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "soak.jsonl"
+                args = soak_monitor.build_parser().parse_args([
+                    "--device-address", "192.168.75.154", "--device-instance", "599153",
+                    "--output", str(path), "--duration", "1", "--interval", "1", "--timeout", "0.1",
+                ])
+                response = dict(bacnet_response(), latency_ms=1.0)
+                responses = [response, soak_monitor.SoakError("I-Am timed out") if "bacnet" in failed else response]
+                calls = {"http_status": 0, "http_config": 0}
+
+                def http(_address, endpoint, _timeout):
+                    name = "http_status" if endpoint.endswith("status") else "http_config"
+                    calls[name] += 1
+                    if calls[name] == 2 and name in failed:
+                        raise soak_monitor.SoakError("HTTP request failed")
+                    return (healthy_status(), 2.0) if name == "http_status" else (healthy_config(), 3.0)
+
+                with patch.object(soak_monitor, "probe_bacnet", side_effect=responses) as bacnet_mock, \
+                     patch.object(soak_monitor, "fetch_json", side_effect=http) as http_mock, \
+                     patch.object(soak_monitor.time, "monotonic", side_effect=range(100)), \
+                     patch("builtins.print"):
+                    self.assertEqual(soak_monitor.run_monitor(args), 1)
+                self.assertEqual(bacnet_mock.call_count, 2)
+                self.assertEqual(http_mock.call_count, 4)
+                records = [json.loads(line) for line in path.read_text().splitlines()]
+                row, summary = records[-2:]
+                self.assertFalse(row["ok"])
+                self.assertIn("error", row)
+                self.assertEqual(
+                    {name for name, entry in row["probe_diagnostics"].items() if not entry["ok"]}, failed
+                )
+                self.assertEqual(summary["samples"], 2)
+                self.assertEqual(summary["successful_samples"], 1)
+                self.assertEqual(summary["request_failures"], 1)
+                self.assertFalse(summary["success"])
+                review = review_soak.review_records(records)
+                self.assertEqual(review["result"], "fail")
+                self.assertEqual(review["request_failures"], 1)
+                self.assertEqual(review["samples_with_findings"], 1)
+
     def test_parse_real_i_am(self) -> None:
         parsed = soak_monitor.parse_i_am(I_AM)
         self.assertEqual(parsed["device_instance"], 599153)

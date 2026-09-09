@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
@@ -18,7 +19,7 @@ import socket
 import statistics
 import sys
 import time
-from typing import Any
+from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
@@ -28,11 +29,21 @@ WHO_IS_UNICAST = bytes.fromhex("81 0a 00 08 01 00 10 08")
 MAX_HTTP_RESPONSE_SIZE = 1024 * 1024
 RELAY_COUNT = 8
 MINIMUM_BACNET_UDP_RECEIVE_MAILBOX_SIZE = 64
-DIRECT_OPENER = build_opener(ProxyHandler({}))
 
 
 class SoakError(RuntimeError):
     """Expected monitor or device error."""
+
+
+class SampleError(SoakError):
+    """A failed sample with independent evidence from every attempted probe."""
+
+    def __init__(self, diagnostics: dict[str, dict[str, Any]]):
+        self.diagnostics = diagnostics
+        super().__init__("; ".join(
+            f"{name}: {entry['error']}"
+            for name, entry in diagnostics.items() if not entry["ok"]
+        ))
 
 
 def utc_now() -> str:
@@ -55,7 +66,9 @@ def fetch_json(device_address: str, path: str, timeout: float) -> tuple[dict[str
     )
     started = time.monotonic()
     try:
-        with DIRECT_OPENER.open(request, timeout=timeout) as response:
+        # Concurrent probes must not share mutable opener/handler state.
+        opener = build_opener(ProxyHandler({}))
+        with opener.open(request, timeout=timeout) as response:
             payload = response.read(MAX_HTTP_RESPONSE_SIZE + 1)
     except HTTPError as error:
         raise SoakError(f"{path} returned HTTP {error.code}") from error
@@ -168,10 +181,12 @@ def probe_bacnet(
 ) -> dict[str, Any]:
     started = time.monotonic()
     deadline = started + timeout
+    local_port: int | None = None
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
             client.settimeout(timeout)
             client.sendto(WHO_IS_UNICAST, (device_address, port))
+            local_port = client.getsockname()[1]
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -184,12 +199,15 @@ def probe_bacnet(
                 if source[0] != device_address or source[1] != port:
                     raise SoakError(f"I-Am came from unexpected source {source}")
                 response["source"] = f"{source[0]}:{source[1]}"
+                response["local_udp_port"] = local_port
                 response["latency_ms"] = round((time.monotonic() - started) * 1000.0, 3)
                 return response
     except socket.timeout as error:
-        raise SoakError("BACnet I-Am timed out") from error
+        raise SoakError(f"BACnet I-Am timed out (local UDP port {local_port})") from error
     except OSError as error:
-        raise SoakError(f"BACnet probe failed: {error}") from error
+        raise SoakError(f"BACnet probe failed (local UDP port {local_port}): {error}") from error
+    except SoakError as error:
+        raise SoakError(f"{error} (local UDP port {local_port})") from error
 
 
 def instance_health_alerts(
@@ -656,12 +674,42 @@ def sample_schedule(duration: float, interval: float):
 def take_sample(
     args: argparse.Namespace,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], float, float]:
-    bacnet = probe_bacnet(
-        args.device_address, args.device_instance, args.bacnet_port, args.timeout
+    def capture(name: str, call: Callable[[], Any]) -> dict[str, Any]:
+        started_at = utc_now()
+        started = time.monotonic()
+        try:
+            value = call()
+            response, latency_ms = (
+                (value, value["latency_ms"]) if name == "bacnet" else value
+            )
+            outcome = {"ok": True, "response": response, "latency_ms": round(latency_ms, 3)}
+        except Exception as error:
+            outcome = {"ok": False, "error": f"{type(error).__name__}: {error}"}
+        outcome.update(
+            started_at=started_at, finished_at=utc_now(),
+            elapsed_ms=round((time.monotonic() - started) * 1000.0, 3),
+        )
+        return outcome
+
+    probes = {
+        "bacnet": lambda: probe_bacnet(
+            args.device_address, args.device_instance, args.bacnet_port, args.timeout
+        ),
+        "http_status": lambda: fetch_json(args.device_address, "/api/v1/status", args.timeout),
+        "http_config": lambda: fetch_json(args.device_address, "/api/v1/config", args.timeout),
+    }
+    # One attempt per protocol endpoint. A missed I-Am must not prevent HTTP
+    # evidence from being captured during that same sampling window.
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        pending = {name: executor.submit(capture, name, call) for name, call in probes.items()}
+        diagnostics = {name: future.result() for name, future in pending.items()}
+    if any(not entry["ok"] for entry in diagnostics.values()):
+        raise SampleError(diagnostics)
+    return (
+        diagnostics["http_status"]["response"], diagnostics["http_config"]["response"],
+        diagnostics["bacnet"]["response"], diagnostics["http_status"]["latency_ms"],
+        diagnostics["http_config"]["latency_ms"],
     )
-    status, status_ms = fetch_json(args.device_address, "/api/v1/status", args.timeout)
-    config, config_ms = fetch_json(args.device_address, "/api/v1/config", args.timeout)
-    return status, config, bacnet, status_ms, config_ms
 
 
 def progress_line(stats: MonitorStats, status: dict[str, Any] | None) -> str:
@@ -792,6 +840,8 @@ def run_monitor(args: argparse.Namespace) -> int:
                     "alerts": [f"request-failure:{category}"],
                     "error": f"{category}: {error}",
                 }
+                if isinstance(error, SampleError):
+                    record["probe_diagnostics"] = error.diagnostics
                 print(f"ALERT sample {sequence}: {record['error']}", file=sys.stderr, flush=True)
             log.write(record)
             if stats.samples % args.summary_every == 0 or not record["ok"]:
