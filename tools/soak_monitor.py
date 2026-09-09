@@ -13,6 +13,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import socket
 import statistics
 import sys
@@ -191,6 +192,36 @@ def probe_bacnet(
         raise SoakError(f"BACnet probe failed: {error}") from error
 
 
+def instance_health_alerts(
+    status: dict[str, Any], config: dict[str, Any], *, required: bool = False
+) -> list[str]:
+    """Validate v1.1+ identity telemetry without rejecting legacy firmware."""
+    version = re.match(r"^(\d+)\.(\d+)(?:\.|$)", str(status.get("firmware_version", "")))
+    modern = version is not None and tuple(map(int, version.groups())) >= (1, 1)
+    present = (
+        any(key in status for key in ("bacnet_instance_status", "bacnet_instance_conflicts"))
+        or any(key in config for key in ("device_instance_auto", "device_instance_locked"))
+    )
+    if not (required or modern or present):
+        return []
+
+    alerts: list[str] = []
+    state = status.get("bacnet_instance_status")
+    if state != "locked":
+        alerts.append(f"bacnet-instance-not-locked:{state!r}")
+    conflicts = status.get("bacnet_instance_conflicts")
+    if type(conflicts) is not int or not 0 <= conflicts <= 0xFFFFFFFF:
+        alerts.append(f"bacnet-instance-conflicts-invalid:{conflicts!r}")
+    if config.get("device_instance_locked") is not True:
+        alerts.append(
+            "bacnet-instance-configuration-unlocked:"
+            f"{config.get('device_instance_locked')!r}"
+        )
+    if type(config.get("device_instance_auto")) is not bool:
+        alerts.append(f"bacnet-instance-mode-invalid:{config.get('device_instance_auto')!r}")
+    return alerts
+
+
 @dataclass
 class Baseline:
     firmware_version: str
@@ -207,6 +238,7 @@ class Baseline:
     bacnet_udp_receive_mailbox_size: int
     config_database_revision: int
     config_sha256: str
+    bacnet_instance_conflicts: int | None = None
 
     @classmethod
     def from_values(
@@ -252,6 +284,9 @@ class Baseline:
                 "BACnet UDP receive mailbox is below the release minimum "
                 f"({mailbox_size} < {MINIMUM_BACNET_UDP_RECEIVE_MAILBOX_SIZE})"
             )
+        instance_alerts = instance_health_alerts(status, config)
+        if instance_alerts:
+            raise SoakError("unsafe instance baseline: " + "; ".join(instance_alerts))
         return cls(
             firmware_version=str(status["firmware_version"]),
             build_date=str(status["build_date"]),
@@ -267,6 +302,9 @@ class Baseline:
             bacnet_udp_receive_mailbox_size=mailbox_size,
             config_database_revision=int(config["database_revision"]),
             config_sha256=config_fingerprint(config),
+            # Resolved startup collisions may leave a nonzero cumulative count.
+            # Require that count to remain unchanged during the soak.
+            bacnet_instance_conflicts=status.get("bacnet_instance_conflicts"),
         )
 
 
@@ -296,9 +334,15 @@ def evaluate_sample(
         "bacnet_udp_port": baseline.bacnet_port,
         "bacnet_udp_receive_mailbox_size": baseline.bacnet_udp_receive_mailbox_size,
     }
+    if baseline.bacnet_instance_conflicts is not None:
+        stable_fields["bacnet_instance_conflicts"] = baseline.bacnet_instance_conflicts
     for key, expected in stable_fields.items():
         if status.get(key) != expected:
             alerts.append(f"{key}-changed:{status.get(key)!r}!={expected!r}")
+
+    alerts.extend(instance_health_alerts(
+        status, config, required=baseline.bacnet_instance_conflicts is not None
+    ))
 
     if config.get("database_revision") != baseline.config_database_revision:
         alerts.append(
