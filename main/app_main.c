@@ -17,6 +17,8 @@
 #include "bacnet_app.h"
 #include "board_io.h"
 #include "config_store.h"
+#include "time_config.h"
+#include "clock_service.h"
 #include "ethernet_manager.h"
 #include "firmware.h"
 #include "usb_setup.h"
@@ -68,6 +70,9 @@ void app_main(void)
     if ((result = config_store_init()) != ESP_OK) {
         fatal_startup_error(result, "configuration", pending_verify);
     }
+    if ((result = time_config_init()) != ESP_OK) {
+        fatal_startup_error(result, "time configuration", pending_verify);
+    }
 
     uint8_t admin_key[FW_AUTH_KEY_BYTES];
     bool key_created = false;
@@ -98,6 +103,9 @@ void app_main(void)
     if ((result = ethernet_manager_init(&config)) != ESP_OK) {
         fatal_startup_error(result, "W5500 Ethernet", pending_verify);
     }
+    if ((result = clock_service_init()) != ESP_OK) {
+        fatal_startup_error(result, "network clock", pending_verify);
+    }
 
     if ((result = bacnet_app_start(&config)) != ESP_OK) {
         fatal_startup_error(result, "BACnet service", pending_verify);
@@ -116,4 +124,5 @@ void app_main(void)
         ESP_ERROR_CHECK(esp_ota_mark_app_valid_cancel_rollback());
         ESP_LOGI(TAG, "OTA image passed startup self-test and is now confirmed");
     }
+    bacnet_app_startup_complete();
 }

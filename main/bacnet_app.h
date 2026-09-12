@@ -8,8 +8,23 @@
 #include "config_model.h"
 #include "bacnet_command_trace.h"
 #include "bacnet_cov_recovery.h"
+#include "bacnet_restart.h"
+#include "bacnet_announcement.h"
+
+typedef struct {
+    bool timestamp_frozen;
+    bool timestamp_from_valid_clock;
+    const char *timestamp_source;
+    BACNET_TIMESTAMP timestamp;
+    uint64_t wait_started_ms;
+    uint64_t selected_ms;
+} bacnet_app_time_stats_t;
 
 esp_err_t bacnet_app_start(const firmware_config_t *config);
+void bacnet_app_startup_complete(void);
+bool bacnet_app_restart_stats_get(bacnet_restart_stats_t *stats);
+bool bacnet_app_announcement_stats_get(bacnet_announcement_t *stats);
+bool bacnet_app_time_stats_get(bacnet_app_time_stats_t *stats);
 bool bacnet_app_running(void);
 uint32_t bacnet_app_packet_count(void);
 uint32_t bacnet_app_device_instance(void);
