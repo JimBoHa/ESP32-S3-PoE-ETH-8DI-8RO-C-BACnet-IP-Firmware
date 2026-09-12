@@ -1,0 +1,5 @@
+# Project default; preserve the existing development workflow's reasoning level.
+model = "gpt-6-astra"
+model_reasoning_effort = "max"
+
+# Authentication, providers, permissions, hooks, and service tier remain inherited.
