@@ -35,4 +35,5 @@ cc -std=c11 -Wall -Wextra -Werror \
 
 cd "$repo_root"
 python3 -m unittest discover -s tests -p 'test_*.py'
+python3 tests/run_bacnet_delivery_tests.py
 python3 tests/run_board_io_tests.py
