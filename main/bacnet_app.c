@@ -14,8 +14,10 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "nvs.h"
 
 #include "bacnet/apdu.h"
+#include "bacnet/bacdcode.h"
 #include "bacnet/bacstr.h"
 #include "bacnet/basic/binding/address.h"
 #include "bacnet/basic/npdu/h_npdu.h"
@@ -38,6 +40,7 @@
 #include "bacnet/basic/service/s_whois.h"
 #include "bacnet/basic/tsm/tsm.h"
 #include "bacnet/cov.h"
+#include "bacnet/dcc.h"
 #include "bacnet/datalink/bip.h"
 #include "bacnet/npdu.h"
 #include "bacnet/iam.h"
@@ -47,6 +50,7 @@
 #include "bacnet_cov_recovery.h"
 #include "board_io.h"
 #include "config_store.h"
+#include "clock_service.h"
 #include "ethernet_manager.h"
 #include "firmware.h"
 
@@ -64,6 +68,15 @@
 static const char *TAG = "bacnet";
 static firmware_config_t s_config;
 static volatile bool s_running;
+static bool s_startup_complete;
+static bacnet_announcement_t s_announcement;
+static bacnet_restart_clock_t s_restart_clock;
+static const char *s_restart_clock_source = "pending";
+static clock_service_snapshot_t s_clock_snapshot;
+static bool s_clock_snapshot_valid;
+static bool s_clock_poll_started;
+static uint64_t s_clock_last_poll_ms;
+static int32_t s_device_optional_properties[64];
 static volatile uint32_t s_packet_count;
 static bacnet_instance_t s_instance;
 static volatile uint32_t s_active_instance;
@@ -78,6 +91,129 @@ static esp_err_t s_start_result;
 static char s_serial_number[18];
 static char s_input_descriptions[FW_DI_COUNT][64];
 static char s_output_descriptions[FW_RELAY_COUNT][80];
+static BACNET_RESTART_REASON restart_reason_to_bacnet(void);
+
+static bool clock_datetime(const struct tm *local, int64_t unix_us,
+    BACNET_DATE_TIME *datetime)
+{
+    if (!local || !datetime || local->tm_year < 0 || local->tm_year > 254 ||
+        local->tm_mon < 0 || local->tm_mon > 11 ||
+        local->tm_mday < 1 || local->tm_mday > 31 ||
+        local->tm_hour < 0 || local->tm_hour > 23 ||
+        local->tm_min < 0 || local->tm_min > 59 ||
+        local->tm_sec < 0 || local->tm_sec > 59 || unix_us < 0) {
+        return false;
+    }
+    datetime_set_date(&datetime->date, local->tm_year + 1900,
+        local->tm_mon + 1, local->tm_mday);
+    datetime_set_time(&datetime->time, local->tm_hour, local->tm_min,
+        local->tm_sec, (unix_us % 1000000) / 10000);
+    return datetime_is_valid(&datetime->date, &datetime->time) &&
+        !datetime_wildcard_present(datetime);
+}
+
+/* Called only under the BACnet object mutex, never from an NTP/TCP-IP callback.
+   Seed the upstream advancing clock, with exact offset/DST reads below. */
+static void update_bacnet_clock(uint64_t now_ms)
+{
+    if (s_clock_poll_started && now_ms - s_clock_last_poll_ms < 1000U) {
+        return;
+    }
+    s_clock_poll_started = true;
+    s_clock_last_poll_ms = now_ms;
+    clock_service_snapshot_t snapshot;
+    BACNET_DATE_TIME local, boot;
+    if (!clock_service_snapshot_get(&snapshot)) {
+        return; /* A busy snapshot does not invalidate the advancing clock. */
+    }
+    if (!snapshot.valid ||
+        !clock_datetime(&snapshot.local_time, snapshot.utc_unix_us, &local) ||
+        !clock_datetime(&snapshot.boot_local_time, snapshot.boot_utc_unix_us, &boot)) {
+        s_clock_snapshot_valid = false;
+        return;
+    }
+    s_clock_snapshot = snapshot;
+    s_clock_snapshot_valid = true;
+    datetime_timesync(&local.date, &local.time, false);
+    (void)datetime_utc_offset_minutes_set(snapshot.utc_offset_minutes);
+}
+
+static BACNET_TIMESTAMP fallback_restart_timestamp(void)
+{
+    BACNET_DATE_TIME local;
+    BACNET_TIMESTAMP timestamp;
+    datetime_set_date(&local.date, 1990, 1, 1);
+    datetime_set_time(&local.time, 0, 0, 0, 0);
+    bacapp_timestamp_datetime_set(&timestamp, &local);
+    return timestamp;
+}
+
+static void select_restart_timestamp(uint64_t now_ms, bool ready)
+{
+    if (ready && !s_restart_clock.selected && s_restart_clock.wait_started &&
+        now_ms - s_restart_clock.wait_started_ms >= BACNET_RESTART_CLOCK_WAIT_MS) {
+        /* A reply just before the deadline must not be missed because the
+           ordinary local-clock refresh is rate limited to once per second. */
+        s_clock_poll_started = false;
+        update_bacnet_clock(now_ms);
+    }
+    BACNET_DATE_TIME boot;
+    bool valid = s_clock_snapshot_valid &&
+        clock_datetime(&s_clock_snapshot.boot_local_time,
+            s_clock_snapshot.boot_utc_unix_us, &boot);
+    bacnet_restart_clock_choice_t choice = bacnet_restart_clock_select(
+        &s_restart_clock, now_ms, ready, valid);
+    if (choice == BACNET_RESTART_CLOCK_WAIT) {
+        return;
+    }
+    BACNET_TIMESTAMP timestamp = fallback_restart_timestamp();
+    if (choice == BACNET_RESTART_CLOCK_VALID) {
+        bacapp_timestamp_datetime_set(&timestamp, &boot);
+    }
+    if (bacnet_restart_set_timestamp_before_ready(&timestamp)) {
+        (void)Device_Set_Time_Of_Restart(&timestamp);
+        s_restart_clock_source = choice == BACNET_RESTART_CLOCK_VALID ?
+            s_clock_snapshot.source : "unsynchronized-1990-fallback";
+    } else {
+        ESP_LOGE(TAG, "Restart timestamp selection rejected; notification suppressed");
+    }
+}
+
+/* The upstream millisecond clock computes DST from its own rules. Return the
+   validated system timezone's actual offset/DST instead, while reading its
+   seeded advancing local clock. No additional Device writes are enabled. */
+static int clock_read_property(BACNET_READ_PROPERTY_DATA *data)
+{
+    BACNET_DATE_TIME local;
+    uint8_t encoded[8];
+    int length;
+    (void)datetime_local(&local.date, &local.time, NULL, NULL);
+    switch (data->object_property) {
+        case PROP_LOCAL_DATE:
+            length = encode_application_date(encoded, &local.date);
+            break;
+        case PROP_LOCAL_TIME:
+            length = encode_application_time(encoded, &local.time);
+            break;
+        case PROP_UTC_OFFSET:
+            length = encode_application_signed(encoded, s_clock_snapshot.utc_offset_minutes);
+            break;
+        default: /* PROP_DAYLIGHT_SAVINGS_STATUS */
+            length = encode_application_boolean(encoded, s_clock_snapshot.daylight_saving);
+            break;
+    }
+    data->error_class = ERROR_CLASS_PROPERTY;
+    if (data->array_index != BACNET_ARRAY_ALL) {
+        data->error_code = ERROR_CODE_PROPERTY_IS_NOT_AN_ARRAY;
+        return BACNET_STATUS_ERROR;
+    }
+    if (!data->application_data || data->application_data_len < length) {
+        data->error_code = ERROR_CODE_ABORT_SEGMENTATION_NOT_SUPPORTED;
+        return BACNET_STATUS_ABORT;
+    }
+    memcpy(data->application_data, encoded, (size_t)length);
+    return length;
+}
 
 static bool read_only_write_property(BACNET_WRITE_PROPERTY_DATA *data)
 {
@@ -154,12 +290,181 @@ static void binary_output_writable_property_list(
     }
 }
 
+static int device_read_property(BACNET_READ_PROPERTY_DATA *data)
+{
+    if (data && data->object_property == PROP_RESTART_NOTIFICATION_RECIPIENTS) {
+        return bacnet_restart_read_property(data);
+    }
+    if (data && s_clock_snapshot_valid &&
+        (data->object_property == PROP_LOCAL_DATE ||
+         data->object_property == PROP_LOCAL_TIME ||
+         data->object_property == PROP_UTC_OFFSET ||
+         data->object_property == PROP_DAYLIGHT_SAVINGS_STATUS)) {
+        return clock_read_property(data);
+    }
+    return Device_Read_Property_Local(data);
+}
+
+static bool device_write_property(BACNET_WRITE_PROPERTY_DATA *data)
+{
+    if (!data) {
+        return false;
+    }
+    if (data->object_property == PROP_RESTART_NOTIFICATION_RECIPIENTS) {
+        return bacnet_restart_write_property(data);
+    }
+    data->error_class = ERROR_CLASS_PROPERTY;
+    data->error_code = Device_Objects_Property_List_Member(OBJECT_DEVICE,
+        data->object_instance, data->object_property) ?
+        ERROR_CODE_WRITE_ACCESS_DENIED : ERROR_CODE_UNKNOWN_PROPERTY;
+    return false;
+}
+
+static void device_property_lists(const int32_t **required,
+    const int32_t **optional, const int32_t **proprietary)
+{
+    Device_Property_Lists(required, NULL, proprietary);
+    if (optional) {
+        *optional = s_device_optional_properties;
+    }
+}
+
+static bool initialize_device_property_list(void)
+{
+    const int32_t *optional = NULL;
+    Device_Property_Lists(NULL, &optional, NULL);
+    unsigned count = 0;
+    bool present = false;
+    while (optional && optional[count] != -1) {
+        if (count >= sizeof(s_device_optional_properties) /
+                sizeof(s_device_optional_properties[0]) - 2U) {
+            return false;
+        }
+        present |= optional[count] == PROP_RESTART_NOTIFICATION_RECIPIENTS;
+        s_device_optional_properties[count] = optional[count];
+        ++count;
+    }
+    if (!present) {
+        s_device_optional_properties[count++] = PROP_RESTART_NOTIFICATION_RECIPIENTS;
+    }
+    s_device_optional_properties[count] = -1;
+    return true;
+}
+
+static bool restart_persist(const uint8_t *bytes, size_t length, void *context)
+{
+    (void)context;
+    return config_store_restart_recipients_set(bytes, length) == ESP_OK;
+}
+
+static bool restart_resolve(const BACNET_RECIPIENT *recipient,
+    BACNET_ADDRESS *destination, void *context)
+{
+    (void)context;
+    memset(destination, 0, sizeof(*destination));
+    if (recipient->tag == BACNET_RECIPIENT_TAG_DEVICE) {
+        unsigned max_apdu = 0;
+        return address_bind_request(recipient->type.device.instance,
+                   &max_apdu, destination) && destination->mac_len == 6 &&
+            destination->net != BACNET_BROADCAST_NETWORK;
+    }
+    if (recipient->tag != BACNET_RECIPIENT_TAG_ADDRESS ||
+        recipient->type.address.net != 0) {
+        return false;
+    }
+    *destination = recipient->type.address;
+    /* net=0/mac_len=0 is the canonical local broadcast. Keep it local;
+       bip_get_broadcast_address() instead constructs a global NPDU broadcast. */
+    return destination->mac_len == 0 || destination->mac_len == 6;
+}
+
+static void restart_discover(const BACNET_RECIPIENT *recipient, void *context)
+{
+    (void)context;
+    if (recipient->tag == BACNET_RECIPIENT_TAG_DEVICE) {
+        Send_WhoIs_Local(recipient->type.device.instance,
+            recipient->type.device.instance);
+    }
+}
+
+static int restart_send(const BACNET_ADDRESS *destination, const uint8_t *apdu,
+    size_t length, void *context)
+{
+    (void)context;
+    /* Never pass an unresolved routed address to bip_send_pdu: mac_len=0
+       would turn it into a broadcast. No destination-rewriting UCOV helper. */
+    if (!destination || !apdu ||
+        (destination->net != 0 && (destination->mac_len != 6 ||
+            destination->net == BACNET_BROADCAST_NETWORK))) {
+        return -1;
+    }
+    uint8_t pdu[MAX_PDU];
+    BACNET_ADDRESS target = *destination, source = {0};
+    BACNET_NPDU_DATA npdu;
+    bip_get_my_address(&source);
+    npdu_encode_npdu_data(&npdu, false, MESSAGE_PRIORITY_NORMAL);
+    int offset = npdu_encode_pdu(pdu, &target, &source, &npdu);
+    if (offset <= 0 || (size_t)offset > sizeof(pdu) ||
+        length > sizeof(pdu) - (size_t)offset) {
+        return -1;
+    }
+    memcpy(pdu + offset, apdu, length);
+    return bip_send_pdu(&target, &npdu, pdu, (unsigned)offset + length);
+}
+
+static int startup_announcement_send(void *context)
+{
+    (void)context;
+    if (dcc_communication_initiation_disabled()) {
+        return -1;
+    }
+    /* Encode locally so the actual transport result reaches the bounded
+       scheduler. This is identity discovery, not a claim of remote receipt. */
+    uint8_t apdu[32];
+    int length = iam_encode_apdu(apdu, Device_Object_Instance_Number(), MAX_APDU,
+        Device_Segmentation_Supported(), Device_Vendor_Identifier());
+    if (length <= 0 || (size_t)length > sizeof(apdu)) {
+        return -1;
+    }
+    const BACNET_ADDRESS local_broadcast = {0};
+    return restart_send(&local_broadcast, apdu, (size_t)length, NULL);
+}
+
+static void initialize_restart_notification(void)
+{
+    /* Only initialize a fallback when no valid clock exists. The notification
+       timestamp stays deferred for a bounded post-readiness clock wait. */
+    BACNET_TIMESTAMP fallback = fallback_restart_timestamp();
+    update_bacnet_clock((uint64_t)esp_timer_get_time() / 1000U);
+    if (!s_clock_snapshot_valid) {
+        datetime_timesync(&fallback.value.dateTime.date,
+            &fallback.value.dateTime.time, false);
+        (void)datetime_utc_offset_minutes_set(0);
+        datetime_dst_enabled_set(false);
+    }
+    (void)Device_Set_Time_Of_Restart(&fallback);
+
+    uint8_t encoded[BACNET_RESTART_RECIPIENT_BYTES_MAX];
+    size_t length = 0;
+    esp_err_t loaded = config_store_restart_recipients_get(encoded,
+        sizeof(encoded), &length);
+    bacnet_restart_load_state_t state = loaded == ESP_OK ?
+        BACNET_RESTART_LOAD_VALID : loaded == ESP_ERR_NVS_NOT_FOUND ?
+        BACNET_RESTART_LOAD_MISSING : BACNET_RESTART_LOAD_INVALID;
+    const bacnet_restart_callbacks_t callbacks = {
+        .persist = restart_persist, .resolve = restart_resolve,
+        .discover = restart_discover, .send = restart_send,
+    };
+    bacnet_restart_init(state, encoded, length, NULL,
+        restart_reason_to_bacnet(), &callbacks, NULL);
+}
+
 static object_functions_t s_object_table[] = {
     {OBJECT_DEVICE, NULL, Device_Count, Device_Index_To_Instance,
         Device_Valid_Object_Instance_Number, Device_Object_Name,
-        Device_Read_Property_Local, NULL,
-        Device_Property_Lists, DeviceGetRRInfo, NULL, NULL, NULL, NULL,
-        NULL, NULL, NULL, NULL, NULL, NULL, NULL},
+        device_read_property, device_write_property,
+        device_property_lists, DeviceGetRRInfo, NULL, NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL, NULL, NULL, bacnet_restart_writable_property_list},
     {OBJECT_BINARY_INPUT, Binary_Input_Init, Binary_Input_Count,
         Binary_Input_Index_To_Instance, Binary_Input_Valid_Instance,
         Binary_Input_Object_Name, Binary_Input_Read_Property, NULL,
@@ -310,6 +615,9 @@ static bool create_configuration_objects(void)
 
 static bool initialize_objects(void)
 {
+    if (!initialize_device_property_list()) {
+        return false;
+    }
     Device_Init(s_object_table);
     (void)Device_Set_Object_Instance_Number(s_config.device_instance);
     (void)Device_Object_Name_ANSI_Init(s_config.device_name);
@@ -323,6 +631,7 @@ static bool initialize_objects(void)
     (void)Device_Set_Location(s_config.location, strlen(s_config.location));
     (void)Device_Last_Restart_Reason_Set(restart_reason_to_bacnet());
     (void)Device_Set_System_Status(STATUS_OPERATIONAL, true);
+    initialize_restart_notification();
 
     uint8_t mac[6];
     ethernet_manager_mac_get(mac);
@@ -408,7 +717,8 @@ static bool initialize_objects(void)
 static void handler_who_is_compatible(
     uint8_t *service_request, uint16_t service_len, BACNET_ADDRESS *source)
 {
-    if (s_instance.state != INSTANCE_READY && s_instance.state != INSTANCE_CLAIMING) {
+    if (!s_startup_complete ||
+        (s_instance.state != INSTANCE_READY && s_instance.state != INSTANCE_CLAIMING)) {
         return;
     }
     if (bip_esp32_last_receive_was_broadcast()) {
@@ -442,6 +752,9 @@ static void handler_instance_i_am(uint8_t *request, uint16_t length,
             &max_apdu, &segmentation, &vendor) != length) {
         return;
     }
+    /* Only fills explicitly requested bindings; unsolicited inventory cannot
+       consume the small address cache used for Device-ID recipients. */
+    address_add_binding(instance, max_apdu, source);
     bacnet_instance_observe(&s_instance, instance, instance_address_key(source),
         (uint64_t)esp_timer_get_time() / 1000U);
 }
@@ -558,6 +871,7 @@ static void bacnet_task(void *context)
     xSemaphoreTake(s_object_mutex, portMAX_DELAY);
     bool initialized = initialize_objects();
     if (initialized) {
+        bacnet_announcement_init(&s_announcement);
         register_service_handlers();
         handler_cov_init();
         bacnet_cov_recovery_init();
@@ -617,6 +931,7 @@ static void bacnet_task(void *context)
             uint16_t length = bip_receive(&source, s_pdu_buffer,
                 sizeof(s_pdu_buffer), 20);
             xSemaphoreTake(s_object_mutex, portMAX_DELAY);
+            update_bacnet_clock((uint64_t)esp_timer_get_time() / 1000U);
             if (length) {
                 command_trace_begin(&source, s_pdu_buffer, length,
                     s_instance.state == INSTANCE_READY);
@@ -641,7 +956,11 @@ static void bacnet_task(void *context)
             }
             if (actions & INSTANCE_ANNOUNCE) {
                 (void)Device_Set_Object_Instance_Number(s_instance.candidate);
-                Send_I_Am(&Handler_Transmit_Buffer[0]);
+                /* Provisional identity announcements belong to conflict
+                   discovery, not the completed-startup announcement campaign. */
+                if (s_startup_complete) {
+                    Send_I_Am(&Handler_Transmit_Buffer[0]);
+                }
             }
             if (actions & INSTANCE_SAVE) {
                 firmware_config_t saved;
@@ -661,9 +980,8 @@ static void bacnet_task(void *context)
                     s_instance.state = INSTANCE_CONFIG_CHANGED;
                 }
             }
-            if (s_instance.state == INSTANCE_READY && !s_running) {
+            if (s_startup_complete && s_instance.state == INSTANCE_READY && !s_running) {
                 s_running = true;
-                Send_I_Am(&Handler_Transmit_Buffer[0]);
                 ESP_LOGI(TAG, "BACnet/IP Device %lu locked; listening on UDP %u",
                     (unsigned long)s_config.device_instance, s_config.bacnet_port);
             }
@@ -685,10 +1003,23 @@ static void bacnet_task(void *context)
                 taskYIELD();
             }
             update_binary_objects();
+            bool startup_ready = s_startup_complete && s_running &&
+                s_instance.state == INSTANCE_READY;
+            /* I-Am does not wait for NTP. The restart timestamp alone gets a
+               bounded clock wait; normal BACnet reads/writes/COV keep running. */
+            bacnet_announcement_tick(&s_announcement, now_ms, startup_ready,
+                startup_announcement_send, NULL);
+            select_restart_timestamp(now_ms, startup_ready);
+            bacnet_restart_tick(now_ms, startup_ready,
+                Device_Object_Instance_Number(), Device_System_Status());
             xSemaphoreGive(s_object_mutex);
         }
 
+        xSemaphoreTake(s_object_mutex, portMAX_DELAY);
         s_running = false;
+        bacnet_announcement_tick(&s_announcement,
+            (uint64_t)esp_timer_get_time() / 1000U, false, NULL, NULL);
+        xSemaphoreGive(s_object_mutex);
         s_instance_status = "waiting-for-network";
         bip_cleanup();
         ESP_LOGW(TAG, "BACnet/IP paused until IPv4 returns");
@@ -731,6 +1062,54 @@ esp_err_t bacnet_app_start(const firmware_config_t *config)
 bool bacnet_app_running(void)
 {
     return s_running;
+}
+
+void bacnet_app_startup_complete(void)
+{
+    if (s_object_mutex && xSemaphoreTake(s_object_mutex, portMAX_DELAY) == pdTRUE) {
+        s_startup_complete = true;
+        xSemaphoreGive(s_object_mutex);
+    }
+}
+
+bool bacnet_app_restart_stats_get(bacnet_restart_stats_t *stats)
+{
+    if (!stats || !s_object_mutex ||
+        xSemaphoreTake(s_object_mutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+        return false;
+    }
+    bacnet_restart_stats_get(stats);
+    xSemaphoreGive(s_object_mutex);
+    return true;
+}
+
+bool bacnet_app_announcement_stats_get(bacnet_announcement_t *stats)
+{
+    if (!stats || !s_object_mutex ||
+        xSemaphoreTake(s_object_mutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+        return false;
+    }
+    *stats = s_announcement;
+    xSemaphoreGive(s_object_mutex);
+    return true;
+}
+
+bool bacnet_app_time_stats_get(bacnet_app_time_stats_t *stats)
+{
+    if (!stats || !s_object_mutex ||
+        xSemaphoreTake(s_object_mutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+        return false;
+    }
+    *stats = (bacnet_app_time_stats_t){
+        .timestamp_frozen = s_restart_clock.selected,
+        .timestamp_from_valid_clock = s_restart_clock.from_valid_clock,
+        .timestamp_source = s_restart_clock_source,
+        .wait_started_ms = s_restart_clock.wait_started_ms,
+        .selected_ms = s_restart_clock.selected_ms,
+    };
+    Device_Time_Of_Restart(&stats->timestamp);
+    xSemaphoreGive(s_object_mutex);
+    return true;
 }
 
 uint32_t bacnet_app_packet_count(void)

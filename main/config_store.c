@@ -13,6 +13,10 @@ static const char *TAG = "config_store";
 static const char *NS_CONFIG = "bacnet_cfg";
 static const char *NS_SECURITY = "bacnet_sec";
 static const char *NS_RUNTIME = "bacnet_run";
+static const char *KEY_RESTART_RECIPIENTS = "restart_rcpt";
+
+#define RESTART_RECIPIENTS_FORMAT_VERSION 1U
+#define RESTART_RECIPIENTS_HEADER_SIZE 3U
 
 static firmware_config_t s_config;
 static SemaphoreHandle_t s_mutex;
@@ -213,5 +217,97 @@ esp_err_t config_store_relay_state_set(uint8_t relay_state)
         result = nvs_commit(handle);
     }
     nvs_close(handle);
+    return result;
+}
+
+/* NVS provides blob integrity; this explicit version/length header avoids
+   persisting compiler layouts, padding, pointers, or the base config schema. */
+static esp_err_t restart_recipients_read(
+    nvs_handle_t handle, uint8_t *encoded, size_t capacity, size_t *length)
+{
+    uint8_t blob[RESTART_RECIPIENTS_HEADER_SIZE + CONFIG_STORE_RESTART_RECIPIENTS_MAX_BYTES];
+    size_t blob_length = sizeof(blob);
+    esp_err_t result = nvs_get_blob(handle, KEY_RESTART_RECIPIENTS, blob, &blob_length);
+    if (result != ESP_OK) {
+        return result;
+    }
+    if (blob_length < RESTART_RECIPIENTS_HEADER_SIZE ||
+        blob[0] != RESTART_RECIPIENTS_FORMAT_VERSION) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    size_t payload_length = (size_t)blob[1] | ((size_t)blob[2] << 8);
+    if (payload_length > CONFIG_STORE_RESTART_RECIPIENTS_MAX_BYTES ||
+        blob_length != RESTART_RECIPIENTS_HEADER_SIZE + payload_length) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (payload_length > capacity) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if (payload_length) {
+        memcpy(encoded, blob + RESTART_RECIPIENTS_HEADER_SIZE, payload_length);
+    }
+    *length = payload_length;
+    return ESP_OK;
+}
+
+esp_err_t config_store_restart_recipients_get(
+    uint8_t *encoded, size_t capacity, size_t *length)
+{
+    if (length) {
+        *length = 0;
+    }
+    if (!length || (!encoded && capacity) || !s_mutex) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (xSemaphoreTake(s_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+    nvs_handle_t handle;
+    esp_err_t result = nvs_open(NS_CONFIG, NVS_READONLY, &handle);
+    if (result == ESP_OK) {
+        result = restart_recipients_read(handle, encoded, capacity, length);
+        nvs_close(handle);
+    }
+    xSemaphoreGive(s_mutex);
+    return result;
+}
+
+esp_err_t config_store_restart_recipients_set(const uint8_t *encoded, size_t length)
+{
+    if ((!encoded && length) || !s_mutex) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (length > CONFIG_STORE_RESTART_RECIPIENTS_MAX_BYTES) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if (xSemaphoreTake(s_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+    nvs_handle_t handle;
+    esp_err_t result = nvs_open(NS_CONFIG, NVS_READWRITE, &handle);
+    if (result == ESP_OK) {
+        uint8_t previous[CONFIG_STORE_RESTART_RECIPIENTS_MAX_BYTES];
+        size_t previous_length = 0;
+        result = restart_recipients_read(handle, previous, sizeof(previous), &previous_length);
+        bool identical = result == ESP_OK && previous_length == length &&
+            (length == 0 || memcmp(previous, encoded, length) == 0);
+        if (!identical && (result == ESP_OK || result == ESP_ERR_NVS_NOT_FOUND ||
+                result == ESP_ERR_NVS_INVALID_LENGTH || result == ESP_ERR_INVALID_STATE)) {
+            uint8_t blob[RESTART_RECIPIENTS_HEADER_SIZE + CONFIG_STORE_RESTART_RECIPIENTS_MAX_BYTES];
+            blob[0] = RESTART_RECIPIENTS_FORMAT_VERSION;
+            blob[1] = (uint8_t)length;
+            blob[2] = (uint8_t)(length >> 8);
+            if (length) {
+                memcpy(blob + RESTART_RECIPIENTS_HEADER_SIZE, encoded, length);
+            }
+            result = nvs_set_blob(handle, KEY_RESTART_RECIPIENTS, blob,
+                RESTART_RECIPIENTS_HEADER_SIZE + length);
+            if (result == ESP_OK) {
+                result = nvs_commit(handle);
+            }
+        }
+        nvs_close(handle);
+    }
+    xSemaphoreGive(s_mutex);
     return result;
 }

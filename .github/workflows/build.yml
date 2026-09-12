@@ -116,6 +116,7 @@ jobs:
           npm ci
           npm test
           npx playwright install --with-deps chromium
+          node ../tests/test_time_web_browser.mjs
           npm run test:browser
           npm run build
       - uses: actions/upload-artifact@v7

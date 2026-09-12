@@ -23,12 +23,15 @@
 #include "auth.h"
 #include "bacnet_app.h"
 #include "board_io.h"
+#include "clock_service.h"
 #include "config_store.h"
 #include "ethernet_manager.h"
 #include "firmware.h"
+#include "time_config.h"
 
 #define CONFIG_BODY_MAX 8192U
 #define RELAY_BODY_MAX 256U
+#define TIME_BODY_MAX 1024U
 #define OTA_RECEIVE_BUFFER 4096U
 #define CONFIG_RECEIVE_DEADLINE_US (15LL * 1000LL * 1000LL)
 #define OTA_RECEIVE_DEADLINE_US (5LL * 60LL * 1000LL * 1000LL)
@@ -150,6 +153,86 @@ static esp_err_t root_handler(httpd_req_t *request)
         (ssize_t)(web_index_end - web_index_start));
 }
 
+static void time_status_to_json(cJSON *root)
+{
+    clock_service_status_t status;
+    if (!clock_service_status_get(&status)) {
+        cJSON_AddNullToObject(root, "time");
+        return;
+    }
+    time_config_t config;
+    time_config_get(&config);
+    cJSON *time = cJSON_AddObjectToObject(root, "time");
+    cJSON_AddBoolToObject(time, "valid", status.valid);
+    cJSON_AddBoolToObject(time, "synchronized", status.synchronized);
+    cJSON_AddBoolToObject(time, "sntp_running", status.sntp_running);
+    cJSON_AddStringToObject(time, "source", status.source);
+    cJSON_AddStringToObject(time, "ntp_server", config.ntp_server);
+    cJSON_AddStringToObject(time, "timezone", config.timezone);
+    cJSON_AddNumberToObject(time, "sync_count", status.sync_count);
+    cJSON_AddNumberToObject(time, "rejected_syncs", status.rejected_syncs);
+    cJSON_AddNumberToObject(time, "start_failures", status.start_failures);
+    cJSON_AddNumberToObject(time, "config_generation", status.config_generation);
+    cJSON_AddNumberToObject(time, "last_sync_unix_us", (double)status.last_sync_unix_us);
+    cJSON_AddNumberToObject(time, "last_sync_uptime_ms", (double)status.last_sync_uptime_ms);
+    cJSON_AddNumberToObject(time, "sync_age_seconds", (double)status.sync_age_seconds);
+    if (status.valid) {
+        cJSON_AddStringToObject(time, "utc_time", status.utc_time);
+        cJSON_AddStringToObject(time, "local_time", status.local_time);
+    } else {
+        cJSON_AddNullToObject(time, "utc_time");
+        cJSON_AddNullToObject(time, "local_time");
+    }
+}
+
+static cJSON *bacnet_address_to_json(const BACNET_ADDRESS *address)
+{
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return NULL;
+    char mac[MAX_MAC_LEN * 2U + 1U], routed[MAX_MAC_LEN * 2U + 1U];
+    size_t mac_length = address->mac_len <= MAX_MAC_LEN ? address->mac_len : MAX_MAC_LEN;
+    size_t routed_length = address->len <= MAX_MAC_LEN ? address->len : MAX_MAC_LEN;
+    auth_hex_encode(address->mac, mac_length, mac);
+    auth_hex_encode(address->adr, routed_length, routed);
+    cJSON_AddNumberToObject(root, "network", address->net);
+    cJSON_AddStringToObject(root, "mac_hex", mac);
+    cJSON_AddStringToObject(root, "routed_address_hex", routed);
+    if (address->mac_len == 6U) {
+        char endpoint[32];
+        snprintf(endpoint, sizeof(endpoint), "%u.%u.%u.%u:%u",
+            address->mac[0], address->mac[1], address->mac[2], address->mac[3],
+            ((unsigned)address->mac[4] << 8U) | address->mac[5]);
+        cJSON_AddStringToObject(root, "udp_endpoint", endpoint);
+    } else if (!address->mac_len && !address->net) {
+        cJSON_AddStringToObject(root, "udp_endpoint", "local-broadcast");
+    }
+    return root;
+}
+
+static void restart_destination_to_json(cJSON *array, const bacnet_restart_destination_stats_t *stats)
+{
+    if (!array) return;
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return;
+    cJSON_AddItemToArray(array, root);
+    if (stats->recipient.tag == BACNET_RECIPIENT_TAG_DEVICE) {
+        cJSON_AddNumberToObject(root, "recipient_device_instance", stats->recipient.type.device.instance);
+    } else {
+        cJSON_AddItemToObject(root, "recipient_address", bacnet_address_to_json(&stats->recipient.type.address));
+    }
+    cJSON_AddBoolToObject(root, "pending", stats->pending);
+    cJSON_AddBoolToObject(root, "canceled", stats->canceled);
+    cJSON_AddBoolToObject(root, "resolved", stats->resolved);
+    if (stats->resolved) cJSON_AddItemToObject(root, "destination", bacnet_address_to_json(&stats->destination));
+    else cJSON_AddNullToObject(root, "destination");
+    cJSON_AddNumberToObject(root, "attempts", stats->attempts);
+    cJSON_AddNumberToObject(root, "send_attempts", stats->send_attempts);
+    cJSON_AddNumberToObject(root, "last_result", stats->last_result);
+    cJSON_AddNumberToObject(root, "first_attempt_ms", (double)stats->first_attempt_ms);
+    cJSON_AddNumberToObject(root, "last_attempt_ms", (double)stats->last_attempt_ms);
+    cJSON_AddNumberToObject(root, "last_accepted_ms", (double)stats->last_accepted_ms);
+}
+
 static esp_err_t status_handler(httpd_req_t *request)
 {
     firmware_config_t config;
@@ -164,6 +247,7 @@ static esp_err_t status_handler(httpd_req_t *request)
     }
 
     cJSON *root = cJSON_CreateObject();
+    if (!root) return send_error(request, "500 Internal Server Error", "out of memory");
     cJSON_AddStringToObject(root, "product", FW_PRODUCT_NAME);
     cJSON_AddStringToObject(root, "firmware_version", app->version);
     cJSON_AddStringToObject(root, "build_date", app->date);
@@ -194,6 +278,64 @@ static esp_err_t status_handler(httpd_req_t *request)
         cJSON_AddNumberToObject(cov, "capacity_errors", cov_stats.capacity_errors);
     } else {
         cJSON_AddNullToObject(root, "bacnet_cov_recovery");
+    }
+    bacnet_restart_stats_t restart_stats;
+    if (bacnet_app_restart_stats_get(&restart_stats)) {
+        cJSON *restart = cJSON_AddObjectToObject(root, "bacnet_restart");
+        cJSON_AddBoolToObject(restart, "boot_ready", restart_stats.boot_ready);
+        cJSON_AddNumberToObject(restart, "recipients_count", restart_stats.recipients_count);
+        cJSON_AddNumberToObject(restart, "pending_recipients", restart_stats.pending_recipients);
+        cJSON_AddNumberToObject(restart, "notifications_sent", restart_stats.notifications_sent);
+        cJSON_AddNumberToObject(restart, "send_failures", restart_stats.send_failures);
+        cJSON_AddNumberToObject(restart, "resolution_failures", restart_stats.resolution_failures);
+        cJSON_AddNumberToObject(restart, "exhausted_recipients", restart_stats.exhausted_recipients);
+        cJSON_AddNumberToObject(restart, "configuration_errors", restart_stats.configuration_errors);
+        cJSON_AddNumberToObject(restart, "persistence_failures", restart_stats.persistence_failures);
+        cJSON_AddBoolToObject(restart, "timestamp_valid", restart_stats.timestamp_valid);
+        cJSON_AddStringToObject(restart, "send_result_semantics", "local transport acceptance; not remote receipt or command restoration");
+        cJSON_AddNumberToObject(restart, "boot_destination_count", restart_stats.destination_count);
+        cJSON *destinations = cJSON_AddArrayToObject(restart, "boot_destinations");
+        for (unsigned i = 0; i < restart_stats.destination_count && i < BACNET_RESTART_RECIPIENTS_MAX; ++i) {
+            restart_destination_to_json(destinations, &restart_stats.destinations[i]);
+        }
+        bacnet_app_time_stats_t time_stats;
+        if (bacnet_app_time_stats_get(&time_stats)) {
+            cJSON_AddStringToObject(restart, "timestamp_clock", time_stats.timestamp_source);
+            cJSON_AddBoolToObject(restart, "timestamp_frozen", time_stats.timestamp_frozen);
+            cJSON_AddBoolToObject(restart, "timestamp_from_valid_clock", time_stats.timestamp_from_valid_clock);
+            cJSON_AddNumberToObject(restart, "clock_wait_started_ms", (double)time_stats.wait_started_ms);
+            cJSON_AddNumberToObject(restart, "timestamp_selected_ms", (double)time_stats.selected_ms);
+            if (time_stats.timestamp.tag == TIME_STAMP_DATETIME) {
+                const BACNET_DATE_TIME *timestamp = &time_stats.timestamp.value.dateTime;
+                char formatted[40];
+                snprintf(formatted, sizeof(formatted), "%04u-%02u-%02uT%02u:%02u:%02u.%02u",
+                    timestamp->date.year, timestamp->date.month, timestamp->date.day,
+                    timestamp->time.hour, timestamp->time.min, timestamp->time.sec, timestamp->time.hundredths);
+                cJSON_AddStringToObject(restart, "timestamp_local", formatted);
+            }
+        }
+    } else {
+        cJSON_AddNullToObject(root, "bacnet_restart");
+    }
+    bacnet_announcement_t announcement_stats;
+    if (bacnet_app_announcement_stats_get(&announcement_stats)) {
+        cJSON *announcement = cJSON_AddObjectToObject(root, "bacnet_announcement");
+        cJSON_AddBoolToObject(announcement, "ready", announcement_stats.ready);
+        cJSON_AddBoolToObject(announcement, "pending", announcement_stats.pending);
+        cJSON_AddBoolToObject(announcement, "exhausted", announcement_stats.exhausted);
+        cJSON_AddNumberToObject(announcement, "episode_attempts", announcement_stats.episode_attempts);
+        cJSON_AddNumberToObject(announcement, "ready_episodes", announcement_stats.ready_episodes);
+        cJSON_AddNumberToObject(announcement, "attempts", announcement_stats.attempts);
+        cJSON_AddNumberToObject(announcement, "transport_acceptances", announcement_stats.transport_acceptances);
+        cJSON_AddNumberToObject(announcement, "failures", announcement_stats.failures);
+        cJSON_AddNumberToObject(announcement, "last_result", announcement_stats.last_result);
+        cJSON_AddNumberToObject(announcement, "first_attempt_ms", (double)announcement_stats.first_attempt_ms);
+        cJSON_AddNumberToObject(announcement, "last_attempt_ms", (double)announcement_stats.last_attempt_ms);
+        cJSON_AddNumberToObject(announcement, "last_accepted_ms", (double)announcement_stats.last_accepted_ms);
+        cJSON_AddNumberToObject(announcement, "next_attempt_ms", (double)announcement_stats.next_attempt_ms);
+        cJSON_AddStringToObject(announcement, "send_result_semantics", "local transport acceptance; not remote receipt");
+    } else {
+        cJSON_AddNullToObject(root, "bacnet_announcement");
     }
     cJSON_AddNumberToObject(root, "digital_inputs_mask", board_io_inputs_mask());
     cJSON_AddNumberToObject(root, "relay_outputs_mask", board_io_relays_mask());
@@ -229,6 +371,7 @@ static esp_err_t status_handler(httpd_req_t *request)
     cJSON_AddBoolToObject(root, "rtc_present", board_io_rtc_present());
     cJSON_AddNumberToObject(root, "free_heap_bytes", esp_get_free_heap_size());
     cJSON_AddNumberToObject(root, "minimum_free_heap_bytes", esp_get_minimum_free_heap_size());
+    time_status_to_json(root);
 
     esp_err_t result = send_json_object(request, "200 OK", root);
     cJSON_Delete(root);
@@ -365,6 +508,20 @@ static esp_err_t config_get_handler(httpd_req_t *request)
     }
     esp_err_t result = send_json_object(request, "200 OK", json);
     cJSON_Delete(json);
+    return result;
+}
+
+static esp_err_t time_get_handler(httpd_req_t *request)
+{
+    time_config_t config;
+    time_config_get(&config);
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return send_error(request, "500 Internal Server Error", "out of memory");
+    cJSON_AddStringToObject(root, "ntp_server", config.ntp_server);
+    cJSON_AddStringToObject(root, "timezone", config.timezone);
+    time_status_to_json(root);
+    esp_err_t result = send_json_object(request, "200 OK", root);
+    cJSON_Delete(root);
     return result;
 }
 
@@ -548,6 +705,58 @@ static esp_err_t config_put_handler(httpd_req_t *request)
     }
     return send_json_text(request, "200 OK",
         "{\"saved\":true,\"persistent\":true,\"reboot_required\":true}");
+}
+
+static esp_err_t time_put_handler(httpd_req_t *request)
+{
+    size_t body_length = 0;
+    uint8_t *body = receive_body(request, TIME_BODY_MAX, &body_length);
+    if (!body) return send_error(request, "400 Bad Request", "invalid time configuration body");
+    char body_hash[FW_AUTH_HEX_SHA256_LEN + 1];
+    char reason[160] = "could not hash request body";
+    if (!auth_sha256_hex(body, body_length, body_hash) ||
+        !request_authorize(request, "PUT", "/api/v1/time", body_length,
+            body_hash, reason, sizeof(reason))) {
+        free(body);
+        return send_error(request, "401 Unauthorized", reason);
+    }
+    /* cJSON strings have no decoded-length API: forbid embedded NULs rather
+       than accepting a truncated hostname, timezone, or property name. */
+    bool embedded_null = memchr(body, '\0', body_length) != NULL ||
+        strstr((const char *)body, "\\u0000") != NULL;
+    cJSON *json = embedded_null ? NULL :
+        cJSON_ParseWithLengthOpts((char *)body, body_length + 1U, NULL, true);
+    free(body);
+    if (!json || !cJSON_IsObject(json)) {
+        cJSON_Delete(json);
+        return send_error(request, "400 Bad Request", "body must be a complete JSON object without NULs");
+    }
+    unsigned server_fields = 0, timezone_fields = 0;
+    bool valid = true;
+    const cJSON *field;
+    cJSON_ArrayForEach(field, json) {
+        if (field->string && !strcmp(field->string, "ntp_server")) ++server_fields;
+        else if (field->string && !strcmp(field->string, "timezone")) ++timezone_fields;
+        else valid = false;
+    }
+    valid = valid && server_fields == 1U && timezone_fields == 1U;
+    snprintf(reason, sizeof(reason), "provide exactly ntp_server and timezone once each");
+    time_config_t candidate = {0};
+    valid = valid &&
+        json_copy_string(json, "ntp_server", candidate.ntp_server,
+            sizeof(candidate.ntp_server), reason, sizeof(reason)) &&
+        json_copy_string(json, "timezone", candidate.timezone,
+            sizeof(candidate.timezone), reason, sizeof(reason)) &&
+        time_config_validate(&candidate, reason, sizeof(reason));
+    cJSON_Delete(json);
+    if (!valid) return send_error(request, "400 Bad Request", reason);
+    esp_err_t result = time_config_update(&candidate);
+    if (result != ESP_OK) {
+        return send_error(request, "500 Internal Server Error", esp_err_to_name(result));
+    }
+    clock_service_config_changed();
+    return send_json_text(request, "200 OK",
+        "{\"saved\":true,\"persistent\":true,\"reboot_required\":false,\"apply_pending\":true}");
 }
 
 static esp_err_t relay_put_handler(httpd_req_t *request)
@@ -770,7 +979,7 @@ esp_err_t web_admin_start(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = FW_HTTP_PORT;
-    config.max_uri_handlers = 9;
+    config.max_uri_handlers = 11;
     config.stack_size = 8192;
     config.lru_purge_enable = true;
     ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG, "start HTTP server");
@@ -782,6 +991,8 @@ esp_err_t web_admin_start(void)
         {.uri = "/api/v1/auth/challenge", .method = HTTP_GET, .handler = challenge_handler},
         {.uri = "/api/v1/config", .method = HTTP_GET, .handler = config_get_handler},
         {.uri = "/api/v1/config", .method = HTTP_PUT, .handler = config_put_handler},
+        {.uri = "/api/v1/time", .method = HTTP_GET, .handler = time_get_handler},
+        {.uri = "/api/v1/time", .method = HTTP_PUT, .handler = time_put_handler},
         {.uri = "/api/v1/relay", .method = HTTP_PUT, .handler = relay_put_handler},
         {.uri = "/api/v1/reboot", .method = HTTP_POST, .handler = reboot_handler},
         {.uri = "/api/v1/ota", .method = HTTP_POST, .handler = ota_handler},
