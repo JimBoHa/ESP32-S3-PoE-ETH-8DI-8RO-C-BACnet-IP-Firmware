@@ -69,6 +69,12 @@ See [COV delivery recovery](BACNET_COMMAND_RECOVERY.md#confirmed-cov-delivery-re
 for behavior and measurement limits. This harness does not replace supervised
 hardware commissioning or prove physical switch-to-door timing.
 
+The suite also runs `tests/run_board_io_tests.py`, compiling the actual relay
+driver against deterministic no-device IDF stubs with ASan/UBSan. It exercises
+mutex timeouts, latest-command retry, expander resets, readback failures, and
+safe output-direction recovery. See [relay output recovery](RELAY_OUTPUT_RECOVERY.md)
+for diagnostic semantics and commissioning limits.
+
 Version 1.0.0 passed complete Windows Chrome and Edge hardware runs with
 native USB and file choosers, full verified backups, erase/flash/boot, key
 handoff and locking, Ethernet OTA, signed reboot, and final BACnet checks.

@@ -37,6 +37,9 @@ static const gpio_num_t INPUT_GPIOS[FW_DI_COUNT] = {
 static i2c_master_bus_handle_t s_i2c_bus;
 static i2c_master_dev_handle_t s_tca9554;
 static SemaphoreHandle_t s_relay_mutex;
+/* Never hold this spinlock across I2C or an RTOS wait. Publishing a new
+   effective command must not depend on acquiring the slow hardware mutex. */
+static portMUX_TYPE s_relay_state_lock = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint8_t s_input_mask;
 static volatile uint8_t s_relay_mask;
 static volatile uint8_t s_relay_desired_mask;
@@ -47,28 +50,130 @@ static bool s_restore_relay_state;
 static bool s_relay_save_dirty;
 static int64_t s_relay_last_change_us;
 static uint32_t s_relay_change_revision;
+static board_io_relay_diagnostics_t s_relay_diagnostics;
+
+static uint8_t relay_desired_mask_get(void)
+{
+    portENTER_CRITICAL(&s_relay_state_lock);
+    uint8_t mask = s_relay_desired_mask;
+    portEXIT_CRITICAL(&s_relay_state_lock);
+    return mask;
+}
+
+static esp_err_t relay_io_result(esp_err_t result)
+{
+    if (result != ESP_OK) {
+        portENTER_CRITICAL(&s_relay_state_lock);
+        s_tca_healthy = false;
+        s_relay_diagnostics.registers_valid = false;
+        s_relay_diagnostics.i2c_errors++;
+        s_relay_diagnostics.last_error = result;
+        portEXIT_CRITICAL(&s_relay_state_lock);
+    }
+    return result;
+}
 
 static esp_err_t tca9554_write_register(uint8_t reg, uint8_t value)
 {
     uint8_t bytes[2] = {reg, value};
     esp_err_t result = i2c_master_transmit(s_tca9554, bytes, sizeof(bytes), I2C_TIMEOUT_MS);
-    s_tca_healthy = result == ESP_OK;
+    return relay_io_result(result);
+}
+
+static esp_err_t tca9554_read_register(uint8_t reg, uint8_t *value)
+{
+    return relay_io_result(i2c_master_transmit_receive(s_tca9554,
+        &reg, sizeof(reg), value, sizeof(*value), I2C_TIMEOUT_MS));
+}
+
+static esp_err_t relay_registers_read_locked(uint8_t *output, uint8_t *configuration)
+{
+    esp_err_t result = tca9554_read_register(TCA9554_REG_CONFIG, configuration);
+    if (result != ESP_OK) {
+        return result;
+    }
+    result = tca9554_read_register(TCA9554_REG_OUTPUT, output);
+    if (result == ESP_OK) {
+        portENTER_CRITICAL(&s_relay_state_lock);
+        s_relay_diagnostics.output_register = *output;
+        s_relay_diagnostics.configuration_register = *configuration;
+        s_relay_diagnostics.registers_valid = true;
+        portEXIT_CRITICAL(&s_relay_state_lock);
+    }
     return result;
 }
 
+static esp_err_t relay_verification_failed(void)
+{
+    portENTER_CRITICAL(&s_relay_state_lock);
+    s_tca_healthy = false;
+    s_relay_diagnostics.verification_failures++;
+    s_relay_diagnostics.last_error = ESP_ERR_INVALID_STATE;
+    portEXIT_CRITICAL(&s_relay_state_lock);
+    return ESP_ERR_INVALID_STATE;
+}
+
+/* Caller holds s_relay_mutex (or is initializing before the task exists).
+   No unbounded retry: each failure leaves the latest desired command pending
+   for the next periodic health pass. The TCA has no register auto-increment. */
 static esp_err_t relay_mask_write_locked(uint8_t mask)
 {
-    uint8_t old_mask = s_relay_mask;
     esp_err_t result = tca9554_write_register(TCA9554_REG_OUTPUT, mask);
-    if (result == ESP_OK) {
-        s_relay_mask = mask;
-        if (old_mask != mask && s_restore_relay_state) {
-            s_relay_last_change_us = esp_timer_get_time();
-            s_relay_save_dirty = true;
-            s_relay_change_revision++;
+    if (result != ESP_OK) {
+        return result;
+    }
+    uint8_t output = 0, configuration = 0;
+    result = relay_registers_read_locked(&output, &configuration);
+    if (result != ESP_OK) {
+        return result;
+    }
+    if (output != mask) {
+        /* Never enable outputs with an unverified latch: a reset latch is FF. */
+        return relay_verification_failed();
+    }
+
+    bool recovered = configuration != 0;
+    if (recovered) {
+        portENTER_CRITICAL(&s_relay_state_lock);
+        s_tca_healthy = false;
+        portEXIT_CRITICAL(&s_relay_state_lock);
+        /* A TCA-only reset returns its pins to inputs. Successful latch writes
+           cannot repair that. Load/verify the desired latch BEFORE enabling
+           the pins; do not force every relay off or revive a saved command. */
+        result = tca9554_write_register(TCA9554_REG_POLARITY, 0);
+        if (result != ESP_OK) {
+            return result;
+        }
+        result = tca9554_write_register(TCA9554_REG_CONFIG, 0);
+        if (result != ESP_OK) {
+            return result;
+        }
+        result = relay_registers_read_locked(&output, &configuration);
+        if (result != ESP_OK) {
+            return result;
         }
     }
-    return result;
+    if (configuration != 0 || output != mask) {
+        return relay_verification_failed();
+    }
+
+    int64_t now_us = esp_timer_get_time();
+    portENTER_CRITICAL(&s_relay_state_lock);
+    uint8_t old_mask = s_relay_mask;
+    s_relay_mask = mask;
+    s_tca_healthy = true;
+    s_relay_diagnostics.last_error = ESP_OK;
+    s_relay_diagnostics.last_verified_ms = (uint64_t)now_us / 1000U;
+    if (recovered) {
+        s_relay_diagnostics.configuration_recoveries++;
+    }
+    portEXIT_CRITICAL(&s_relay_state_lock);
+    if (old_mask != mask && s_restore_relay_state) {
+        s_relay_last_change_us = now_us;
+        s_relay_save_dirty = true;
+        s_relay_change_revision++;
+    }
+    return ESP_OK;
 }
 
 static void input_and_health_task(void *context)
@@ -112,7 +217,7 @@ static void input_and_health_task(void *context)
             if (xSemaphoreTake(s_relay_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                 /* Retry the BACnet-effective command after a transient I2C
                    failure instead of silently preserving a stale output. */
-                (void)relay_mask_write_locked(s_relay_desired_mask);
+                (void)relay_mask_write_locked(relay_desired_mask_get());
                 xSemaphoreGive(s_relay_mutex);
             }
             s_rtc_present = i2c_master_probe(s_i2c_bus, PCF85063_ADDRESS, I2C_TIMEOUT_MS) == ESP_OK;
@@ -194,16 +299,27 @@ esp_err_t board_io_init(const firmware_config_t *config)
     ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(s_i2c_bus, &tca_config, &s_tca9554),
         TAG, "attach TCA9554");
 
-    /* Safety order matters: clear output latch before pins become outputs. */
-    ESP_RETURN_ON_ERROR(tca9554_write_register(TCA9554_REG_OUTPUT, 0), TAG, "force relays off");
-    ESP_RETURN_ON_ERROR(tca9554_write_register(TCA9554_REG_POLARITY, 0), TAG, "set relay polarity");
-    ESP_RETURN_ON_ERROR(tca9554_write_register(TCA9554_REG_CONFIG, 0), TAG, "enable relay outputs");
-    s_relay_mask = 0;
+    /* Apply Off first, including an ESP-only restart with TCA outputs still
+       enabled. Verify that latch BEFORE enabling any reset-input pins; an
+       ACKed but discarded latch write must never expose the reset FF latch. */
+    portENTER_CRITICAL(&s_relay_state_lock);
     s_relay_desired_mask = 0;
+    portEXIT_CRITICAL(&s_relay_state_lock);
+    ESP_RETURN_ON_ERROR(relay_mask_write_locked(0), TAG, "verify relay outputs off");
+    /* The cold-start recovery path already set polarity before enabling pins.
+       Also initialize it when the expander kept its output configuration. */
+    ESP_RETURN_ON_ERROR(tca9554_write_register(TCA9554_REG_POLARITY, 0), TAG, "set relay polarity");
+    /* Enabling the initial reset-input configuration is normal startup, not
+       evidence that the expander lost its configuration during operation. */
+    portENTER_CRITICAL(&s_relay_state_lock);
+    s_relay_diagnostics.configuration_recoveries = 0;
+    portEXIT_CRITICAL(&s_relay_state_lock);
 
     if (s_restore_relay_state) {
         uint8_t restored = config_store_relay_state_get();
+        portENTER_CRITICAL(&s_relay_state_lock);
         s_relay_desired_mask = restored;
+        portEXIT_CRITICAL(&s_relay_state_lock);
         ESP_RETURN_ON_ERROR(relay_mask_write_locked(restored), TAG, "restore relay state");
         ESP_LOGW(TAG, "Relay restore enabled; restored mask 0x%02x", restored);
     }
@@ -233,36 +349,64 @@ esp_err_t board_io_relay_set(unsigned index, bool active)
     if (index >= FW_RELAY_COUNT || !s_relay_mutex) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (xSemaphoreTake(s_relay_mutex, pdMS_TO_TICKS(250)) != pdTRUE) {
-        return ESP_ERR_TIMEOUT;
-    }
+    portENTER_CRITICAL(&s_relay_state_lock);
     uint8_t new_mask = active ? (uint8_t)(s_relay_desired_mask | (1U << index)) :
         (uint8_t)(s_relay_desired_mask & ~(1U << index));
     s_relay_desired_mask = new_mask;
-    esp_err_t result = s_relay_mask == new_mask && s_tca_healthy ?
-        ESP_OK : relay_mask_write_locked(new_mask);
+    portEXIT_CRITICAL(&s_relay_state_lock);
+    if (xSemaphoreTake(s_relay_mutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+        portENTER_CRITICAL(&s_relay_state_lock);
+        s_tca_healthy = false;
+        s_relay_diagnostics.registers_valid = false;
+        s_relay_diagnostics.mutex_timeouts++;
+        s_relay_diagnostics.last_error = ESP_ERR_TIMEOUT;
+        portEXIT_CRITICAL(&s_relay_state_lock);
+        return ESP_ERR_TIMEOUT;
+    }
+    /* Re-read after the wait: a later command must supersede an older one. */
+    esp_err_t result = relay_mask_write_locked(relay_desired_mask_get());
     xSemaphoreGive(s_relay_mutex);
     return result;
 }
 
 bool board_io_relay_get(unsigned index)
 {
-    return index < FW_RELAY_COUNT && (s_relay_mask & (1U << index)) != 0;
+    return index < FW_RELAY_COUNT && (board_io_relays_mask() & (1U << index)) != 0;
 }
 
 uint8_t board_io_relays_mask(void)
 {
-    return s_relay_mask;
+    portENTER_CRITICAL(&s_relay_state_lock);
+    uint8_t mask = s_relay_mask;
+    portEXIT_CRITICAL(&s_relay_state_lock);
+    return mask;
 }
 
 uint8_t board_io_relay_commands_mask(void)
 {
-    return s_relay_desired_mask;
+    return relay_desired_mask_get();
 }
 
 bool board_io_relay_controller_healthy(void)
 {
-    return s_tca_healthy;
+    portENTER_CRITICAL(&s_relay_state_lock);
+    bool healthy = s_tca_healthy && s_relay_desired_mask == s_relay_mask;
+    portEXIT_CRITICAL(&s_relay_state_lock);
+    return healthy;
+}
+
+bool board_io_relay_diagnostics_get(board_io_relay_diagnostics_t *diagnostics)
+{
+    if (!diagnostics) {
+        return false;
+    }
+    portENTER_CRITICAL(&s_relay_state_lock);
+    *diagnostics = s_relay_diagnostics;
+    diagnostics->desired_mask = s_relay_desired_mask;
+    diagnostics->applied_mask = s_relay_mask;
+    diagnostics->healthy = s_tca_healthy && s_relay_desired_mask == s_relay_mask;
+    portEXIT_CRITICAL(&s_relay_state_lock);
+    return true;
 }
 
 bool board_io_rtc_present(void)

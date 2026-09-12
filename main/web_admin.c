@@ -205,6 +205,27 @@ static esp_err_t status_handler(httpd_req_t *request)
         cJSON_AddItemToArray(priorities, cJSON_CreateNumber(relay_priorities[i]));
     }
     cJSON_AddBoolToObject(root, "relay_controller_healthy", board_io_relay_controller_healthy());
+    board_io_relay_diagnostics_t relay_diagnostics;
+    if (board_io_relay_diagnostics_get(&relay_diagnostics)) {
+        cJSON *relay = cJSON_AddObjectToObject(root, "relay_driver");
+        cJSON_AddNumberToObject(relay, "desired_mask", relay_diagnostics.desired_mask);
+        cJSON_AddNumberToObject(relay, "applied_mask", relay_diagnostics.applied_mask);
+        cJSON_AddBoolToObject(relay, "healthy", relay_diagnostics.healthy);
+        cJSON_AddBoolToObject(relay, "registers_valid", relay_diagnostics.registers_valid);
+        if (relay_diagnostics.registers_valid) {
+            cJSON_AddNumberToObject(relay, "output_register", relay_diagnostics.output_register);
+            cJSON_AddNumberToObject(relay, "configuration_register", relay_diagnostics.configuration_register);
+        } else {
+            cJSON_AddNullToObject(relay, "output_register");
+            cJSON_AddNullToObject(relay, "configuration_register");
+        }
+        cJSON_AddNumberToObject(relay, "i2c_errors", relay_diagnostics.i2c_errors);
+        cJSON_AddNumberToObject(relay, "verification_failures", relay_diagnostics.verification_failures);
+        cJSON_AddNumberToObject(relay, "configuration_recoveries", relay_diagnostics.configuration_recoveries);
+        cJSON_AddNumberToObject(relay, "mutex_timeouts", relay_diagnostics.mutex_timeouts);
+        cJSON_AddNumberToObject(relay, "last_error", relay_diagnostics.last_error);
+        cJSON_AddNumberToObject(relay, "last_verified_ms", (double)relay_diagnostics.last_verified_ms);
+    }
     cJSON_AddBoolToObject(root, "rtc_present", board_io_rtc_present());
     cJSON_AddNumberToObject(root, "free_heap_bytes", esp_get_free_heap_size());
     cJSON_AddNumberToObject(root, "minimum_free_heap_bytes", esp_get_minimum_free_heap_size());
