@@ -4,6 +4,7 @@ idf_component_register(
         "auth.c"
         "bacnet_app.c"
         "bacnet_command_trace.c"
+        "bacnet_cov_recovery.c"
         "bacnet_instance.c"
         "bip_esp32.c"
         "board_io.c"
