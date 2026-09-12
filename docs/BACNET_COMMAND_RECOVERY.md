@@ -5,6 +5,11 @@ things. A BAS can rediscover the same controller, read its points, and renew
 COV subscriptions while sending no new output command. COV reports values;
 it does not request that an output remain on.
 
+For an accepted command that fails between the BACnet object and the expander,
+see the separate [relay output recovery candidate](RELAY_OUTPUT_RECOVERY.md).
+It adds driver retry/readback without retaining priorities or inventing a BAS
+command. Earlier firmware's successful-write mask was not register readback.
+
 ## What survives
 
 The following applies to compatible Ethernet OTA updates and normal reboots,

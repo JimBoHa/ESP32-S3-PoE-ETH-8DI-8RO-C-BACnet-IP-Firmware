@@ -37,3 +37,9 @@ cd "$repo_root"
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 tests/run_bacnet_delivery_tests.py
 python3 tests/run_board_io_tests.py
+python3 tests/run_restart_store_tests.py
+python3 tests/run_bacnet_restart_tests.py
+python3 tests/run_clock_model_tests.py
+python3 tests/run_clock_service_tests.py
+python3 tests/run_time_config_tests.py
+python3 tests/run_bacnet_announcement_tests.py

@@ -1,6 +1,6 @@
 # BACnet implementation summary
 
-This is an engineering PICS-style summary for firmware 1.1.0. It is not a BTL
+This is an engineering PICS-style summary through the 1.1.4 development candidate. It is not a BTL
 test report, listing, or certification claim.
 
 ## Device and data link
@@ -37,9 +37,21 @@ Later conflicts are reported without automatically changing that instance.
 - WriteProperty
 - SubscribeCOV, with confirmed or unconfirmed notifications as requested
 
-The firmware also sends I-Am after BACnet/IP starts. It does not implement
+The firmware also sends I-Am after completed application startup, BACnet/IP
+socket readiness, and settled identity. The 1.1.4 candidate bounds actual
+send-failure retries to five attempts one second apart per ready/link-return
+episode; successful UDP acceptance stops retries and is not a remote ACK.
+The 1.1.3 candidate adds
+the [Device Restart Procedure](BACNET_RESTART_NOTIFICATIONS.md), originating
+UnconfirmedCOVNotification after completed startup and BACnet readiness.
+The 1.1.4 candidate selects one frozen boot DateTime from validated network
+time, with a nonblocking five-second clock deadline and explicit fallback.
+Normal I-Am, reads/writes, and COV processing do not wait for network time.
+It does not implement
 DeviceCommunicationControl, ReinitializeDevice, WritePropertyMultiple, time
-synchronization, alarm/event services, file transfer, or private transfer.
+synchronization through BACnet, alarm/event services, file transfer, or private
+transfer. The separate [NTP client](NETWORK_TIME.md) does not imply support for
+BACnet TimeSynchronization or UTCTimeSynchronization.
 
 Broadcast Who-Is requests receive a broadcast I-Am. Unicast Who-Is requests
 receive a unicast I-Am directed back to the requesting BACnet/IP address. A
@@ -82,7 +94,20 @@ use.
 Identity, model, firmware/application versions, serial derived from Ethernet
 MAC, location, restart information, supported object/service bit strings,
 object list, database revision, and active COV subscriptions are exposed.
-Properties are read-only over BACnet. Persistent identity changes use the
+Properties are read-only over BACnet except the 1.1.3 candidate's persistent
+`Restart_Notification_Recipients` whole-list property (eight recipients,
+256 encoded bytes; Device-ID or local IPv4 address recipients). Empty disables
+notifications; missing configuration defaults to local broadcast. In 1.1.4,
+Local_Date, Local_Time, UTC_Offset and Daylight_Savings_Status use validated
+NTP time or explicitly identified warm-retained NTP holdover and the configured
+timezone. UTC_Offset uses BACnet's standard-time minutes-west convention;
+seasonal DST is reported separately. Updates are serialized by the BACnet
+object mutex. Restart DateTime freezes the clock service's boot-local timestamp
+once; late time or timezone changes never alter an already announced restart.
+If no valid clock is available by the bounded startup deadline, its timestamp
+uses an unsynchronized 1990 fallback, not actual wall-clock time. Neither a
+valid restart packet nor current clock time proves supervisory command replay.
+Persistent identity changes use the
 authenticated management API and take effect after reboot.
 
 The standard Device `Last_Restart_Reason` is the portable BACnet view. The
