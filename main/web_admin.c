@@ -185,6 +185,16 @@ static esp_err_t status_handler(httpd_req_t *request)
         CONFIG_LWIP_UDP_RECVMBOX_SIZE);
     cJSON_AddNumberToObject(root, "bacnet_vendor_id", config.vendor_id);
     cJSON_AddNumberToObject(root, "bacnet_packets_received", bacnet_app_packet_count());
+    bacnet_cov_recovery_stats_t cov_stats;
+    if (bacnet_app_cov_recovery_get(&cov_stats)) {
+        cJSON *cov = cJSON_AddObjectToObject(root, "bacnet_cov_recovery");
+        cJSON_AddNumberToObject(cov, "confirmed_timeouts", cov_stats.confirmed_timeouts);
+        cJSON_AddNumberToObject(cov, "refresh_requests", cov_stats.refresh_requests);
+        cJSON_AddNumberToObject(cov, "pending_objects", cov_stats.pending_objects);
+        cJSON_AddNumberToObject(cov, "capacity_errors", cov_stats.capacity_errors);
+    } else {
+        cJSON_AddNullToObject(root, "bacnet_cov_recovery");
+    }
     cJSON_AddNumberToObject(root, "digital_inputs_mask", board_io_inputs_mask());
     cJSON_AddNumberToObject(root, "relay_outputs_mask", board_io_relays_mask());
     cJSON_AddNumberToObject(root, "relay_commands_mask", board_io_relay_commands_mask());
