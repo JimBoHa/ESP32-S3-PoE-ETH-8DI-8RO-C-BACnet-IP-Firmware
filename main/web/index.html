@@ -24,6 +24,7 @@
       --shadow: 0 3px 12px rgba(0, 0, 0, .16);
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body {
       margin: 0;
       background: var(--page);
@@ -303,9 +304,27 @@
           <div class="metric"><span>Partition</span><strong id="sPartition">—</strong></div>
         </article>
         <article class="card">
+          <h3>Network time</h3>
+          <div class="metric"><span>Clock state</span><strong id="sClockState">—</strong></div>
+          <div class="metric"><span>Local time</span><strong id="sLocalTime">—</strong></div>
+          <div class="metric"><span>UTC</span><strong id="sUtcTime">—</strong></div>
+          <div class="metric"><span>NTP server</span><strong id="sNtpServer">—</strong></div>
+          <div class="metric"><span>Last NTP sync (UTC)</span><strong id="sLastSync">—</strong></div>
+          <div class="metric"><span>Timezone rule</span><strong id="sTimezone">—</strong></div>
+        </article>
+        <article class="card">
+          <h3>BACnet startup</h3>
+          <div class="metric"><span>Restart timestamp (local)</span><strong id="sRestartTime">—</strong></div>
+          <div class="metric"><span>Restart clock source</span><strong id="sRestartClock">—</strong></div>
+          <div class="metric"><span>I-Am accepted / attempts</span><strong id="sAnnouncements">—</strong></div>
+          <div class="metric"><span>Restart sends / pending</span><strong id="sRestartSends">—</strong></div>
+          <p class="note">Counts indicate local UDP transport acceptance, not supervisory receipt or restored commands. Per-destination diagnostics are in Status JSON.</p>
+        </article>
+        <article class="card">
           <h3>Raw API</h3>
           <p><a href="/api/v1/status" target="_blank" rel="noreferrer">Status JSON</a></p>
           <p><a href="/api/v1/config" target="_blank" rel="noreferrer">Configuration JSON</a></p>
+          <p><a href="/api/v1/time" target="_blank" rel="noreferrer">Time configuration JSON</a></p>
           <p class="note">Read-only endpoints require no key. Mutations require a fresh HMAC challenge.</p>
         </article>
       </div>
@@ -313,7 +332,7 @@
 
     <section id="config" class="panel" aria-labelledby="config-title">
       <h2 id="config-title">Configuration</h2>
-      <p class="panel-intro">Saved changes are CRC-protected in NVS and take effect after reboot.</p>
+      <p class="panel-intro">Device and network changes take effect after reboot. Network time has a separate save action and applies without reboot.</p>
       <form id="configForm">
         <div class="form-grid">
           <label class="wide"><span><input id="cInstanceAuto" type="checkbox">Automatically choose a free 599xxx instance, then lock it</span><small>Checks responding BACnet/IP devices before assigning 599000–599999. The saved ID stays fixed across reboots and later conflicts. Uncheck to enter an instance manually.</small></label>
@@ -354,6 +373,38 @@
           <button id="rebootConfig" type="button" class="action danger auth-action" disabled>Reboot device</button>
         </div>
       </form>
+      <form id="timeForm">
+        <fieldset>
+          <legend>Network time (NTP)</legend>
+          <p class="note">Stored separately from device identity and relay settings. NTP uses UDP port 123; hostname servers also require DNS. Time synchronization never pauses I/O.</p>
+          <div class="form-grid">
+            <label>NTP server<input id="tNtpServer" maxlength="253" required spellcheck="false" autocapitalize="none" placeholder="pool.ntp.org"><small>Hostname or IPv4 address, without protocol, path, or port.</small></label>
+            <label>Timezone<select id="tTimezonePreset">
+              <option value="UTC0">UTC</option>
+              <option value="PST8PDT,M3.2.0/2,M11.1.0/2">America/Los_Angeles — Pacific</option>
+              <option value="MST7MDT,M3.2.0/2,M11.1.0/2">America/Denver — Mountain</option>
+              <option value="MST7">America/Phoenix — no DST</option>
+              <option value="CST6CDT,M3.2.0/2,M11.1.0/2">America/Chicago — Central</option>
+              <option value="EST5EDT,M3.2.0/2,M11.1.0/2">America/New_York — Eastern</option>
+              <option value="AKST9AKDT,M3.2.0/2,M11.1.0/2">America/Anchorage — Alaska</option>
+              <option value="HST10">Pacific/Honolulu — no DST</option>
+              <option value="GMT0BST,M3.5.0/1,M10.5.0/2">Europe/London</option>
+              <option value="CET-1CEST,M3.5.0/2,M10.5.0/3">Europe/Berlin</option>
+              <option value="IST-5:30">Asia/Kolkata</option>
+              <option value="JST-9">Asia/Tokyo</option>
+              <option value="AEST-10AEDT,M10.1.0/2,M4.1.0/3">Australia/Sydney</option>
+              <option value="NZST-12NZDT,M9.5.0/2,M4.1.0/3">Pacific/Auckland</option>
+              <option value="custom">Custom POSIX TZ rule</option>
+            </select><small>Presets use current recurring rules, not a downloadable timezone database.</small></label>
+            <label id="tTimezoneCustomLabel" class="wide" hidden>Custom POSIX TZ rule<input id="tTimezoneCustom" maxlength="95" spellcheck="false" autocapitalize="none" placeholder="PST8PDT,M3.2.0/2,M11.1.0/2"><small>Use STDoffset or STDoffsetDST,start,end with both DST rules explicit; abbreviations 3–10 characters. Examples: UTC0 or EST5EDT,M3.2.0/2,M11.1.0/2. IANA paths are not accepted in this field.</small></label>
+          </div>
+          <p class="note">NTP is unauthenticated. Choose a trusted server on the automation network when available. Clock validity and synchronization are shown under BACnet &amp; Status.</p>
+          <div class="footer-actions">
+            <button id="reloadTime" type="button" class="action">Reload time settings</button>
+            <button id="saveTime" type="submit" class="action primary auth-action" disabled>Save time settings</button>
+          </div>
+        </fieldset>
+      </form>
     </section>
 
     <section id="firmware" class="panel" aria-labelledby="firmware-title">
@@ -385,8 +436,11 @@
   const relayCount = 8;
   let latestStatus = null;
   let latestConfig = null;
+  let latestTimeConfig = null;
   let newInstanceRequested = false;
   let configDirty = false;
+  let timeDirty = false;
+  let timeEditVersion = 0;
   let toastTimer = 0;
   let polling = false;
   let cryptoReady = false;
@@ -576,6 +630,22 @@
     $('sVersion').textContent = status.firmware_version;
     $('sBuild').textContent = status.build_date;
     $('sPartition').textContent = status.running_partition;
+    const time = status.time;
+    $('sClockState').textContent = !time ? 'Unavailable' : !time.valid ?
+      (time.sntp_running ? 'Waiting for NTP' : 'Unsynchronized') :
+      (time.synchronized ? `NTP synchronized · ${time.sync_age_seconds}s since sync` : 'Retained NTP time · waiting for fresh sync');
+    $('sLocalTime').textContent = time?.valid ? time.local_time : 'Not yet valid';
+    $('sUtcTime').textContent = time?.valid ? time.utc_time : 'Not yet valid';
+    $('sNtpServer').textContent = time?.ntp_server || '—';
+    $('sTimezone').textContent = time?.timezone || '—';
+    $('sLastSync').textContent = time?.last_sync_unix_us > 0 ?
+      new Date(time.last_sync_unix_us / 1000).toISOString() : 'No accepted NTP response this boot';
+    const restart = status.bacnet_restart;
+    $('sRestartTime').textContent = restart?.timestamp_frozen ? restart.timestamp_local : 'Waiting for startup clock selection';
+    $('sRestartClock').textContent = restart?.timestamp_clock || '—';
+    $('sAnnouncements').textContent = status.bacnet_announcement ?
+      `${status.bacnet_announcement.transport_acceptances} / ${status.bacnet_announcement.attempts}` : '—';
+    $('sRestartSends').textContent = restart ? `${restart.notifications_sent} / ${restart.pending_recipients}` : '—';
   }
 
   function renderConfig(config, fillForm=false) {
@@ -627,6 +697,10 @@
                  ['locked', 'locked-conflict'].includes(status.bacnet_instance_status)) {
         await loadConfig(!configDirty);
       }
+      if (!latestTimeConfig) {
+        const timeConfig = await responseJson(await fetch('/api/v1/time', {cache:'no-store'}));
+        renderTimeConfig(timeConfig, !timeDirty);
+      }
     } catch (error) {
       setConnected(false, `Cannot reach device: ${error.message}`);
     } finally { polling = false; }
@@ -636,6 +710,49 @@
     const config = await responseJson(await fetch('/api/v1/config', {cache:'no-store'}));
     renderConfig(config, fill);
     if (fill) notify('Configuration reloaded.');
+  }
+
+  function updateTimezoneFields() {
+    const custom = $('tTimezonePreset').value === 'custom';
+    $('tTimezoneCustomLabel').hidden = !custom;
+    $('tTimezoneCustom').disabled = !custom;
+    $('tTimezoneCustom').required = custom;
+  }
+
+  function renderTimeConfig(config, fillForm=false) {
+    latestTimeConfig = config;
+    if (!fillForm) return;
+    $('tNtpServer').value = config.ntp_server;
+    const known = Array.from($('tTimezonePreset').options).some(option => option.value === config.timezone);
+    $('tTimezonePreset').value = known ? config.timezone : 'custom';
+    $('tTimezoneCustom').value = config.timezone;
+    timeDirty = false;
+    updateTimezoneFields();
+  }
+
+  async function loadTime(fill=true) {
+    const config = await responseJson(await fetch('/api/v1/time', {cache:'no-store'}));
+    renderTimeConfig(config, fill);
+    if (fill) notify('Time settings reloaded.');
+  }
+
+  async function saveTimeConfiguration(event) {
+    event.preventDefault();
+    if (!$('timeForm').reportValidity()) return;
+    const editVersion = timeEditVersion;
+    const body = enc.encode(JSON.stringify({
+      ntp_server: $('tNtpServer').value,
+      timezone: $('tTimezonePreset').value === 'custom' ? $('tTimezoneCustom').value : $('tTimezonePreset').value
+    }));
+    setAuthControls(false);
+    try {
+      await authFetch('/api/v1/time', 'PUT', body, 'application/json');
+      await loadTime(false);
+      if (timeEditVersion === editVersion) renderTimeConfig(latestTimeConfig, true);
+      notify('Time settings saved. Applying without reboot; check clock status for synchronization.');
+      await poll();
+    } catch (error) { notify(error.message, true); }
+    finally { updateAuthState(); }
   }
 
   async function relayCommand(channel, state) {
@@ -844,6 +961,10 @@
   $('configForm').addEventListener('input', () => { configDirty = true; });
   $('reloadConfig').addEventListener('click', () => loadConfig(true).catch(error => notify(error.message, true)));
   $('configForm').addEventListener('submit', saveConfiguration);
+  $('timeForm').addEventListener('input', () => { timeDirty = true; timeEditVersion++; });
+  $('tTimezonePreset').addEventListener('change', updateTimezoneFields);
+  $('timeForm').addEventListener('submit', saveTimeConfiguration);
+  $('reloadTime').addEventListener('click', () => loadTime(true).catch(error => notify(error.message, true)));
   $('rebootConfig').addEventListener('click', rebootDevice);
   $('rebootFirmware').addEventListener('click', rebootDevice);
   $('otaFile').addEventListener('change', describeOta);
@@ -851,6 +972,7 @@
   cryptoReady = cryptoSelfTest();
   if (!cryptoReady) notify('This browser failed the command-signing self-test. Read-only monitoring remains available.', true);
   updateAuthState();
+  updateTimezoneFields();
   poll();
   setInterval(poll, 1000);
   </script>

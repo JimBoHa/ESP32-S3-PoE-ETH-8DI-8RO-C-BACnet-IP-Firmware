@@ -4,8 +4,8 @@ This candidate repairs reproduced output-driver failure mechanisms. It was
 installed on one output controller on September 10, 2026 and passed bounded
 BACnet command/register-readback tests. Those tests do not establish the cause
 of the earlier field incident or physical switch-to-door timing. It is
-separate from BACnet COV delivery recovery, which repairs a notification-delivery
-path rather than relay application.
+separate from [COV delivery recovery](BACNET_COMMAND_RECOVERY.md#confirmed-cov-delivery-recovery-112-development-candidate),
+which repairs a notification-delivery path rather than relay application.
 
 ## Correction
 

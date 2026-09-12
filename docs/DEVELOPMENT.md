@@ -55,9 +55,8 @@ Host tests cover persistent-model validation/CRC behavior; management-client
 URL, key, OTA descriptor, canonical request, HMAC, and relay command behavior;
 bounded BACnet command-trace filtering, response association, truncation, ring
 ordering, and authenticated client routing; and static integrity of the embedded
-management interface. The IDF build
-compiles the real ESP32-S3 application, embedded page, and selected
-bacnet-stack sources.
+management interface. The IDF build compiles the real ESP32-S3 application,
+embedded page, and selected bacnet-stack sources.
 
 The host suite also runs `tests/run_bacnet_delivery_tests.py`. It compiles the
 pinned BACnet COV, transaction state machine, APDU dispatcher, and BI/BO code
@@ -74,6 +73,23 @@ driver against deterministic no-device IDF stubs with ASan/UBSan. It exercises
 mutex timeouts, latest-command retry, expander resets, readback failures, and
 safe output-direction recovery. See [relay output recovery](RELAY_OUTPUT_RECOVERY.md)
 for diagnostic semantics and commissioning limits.
+
+Restart notification coverage adds `tests/run_bacnet_restart_tests.py` and
+`tests/run_restart_store_tests.py`: bounded recipient/wire-format/scheduler
+tests and actual configuration-store code against isolated NVS stubs, both
+with ASan/UBSan. Static integration checks cover dispatcher wiring and startup
+ordering. See [restart notifications](BACNET_RESTART_NOTIFICATIONS.md); passing
+local tests does not prove supervisory command reassertion after restart.
+
+The 1.1.4 network clock adds `run_clock_model_tests.py`,
+`run_clock_service_tests.py`, `run_time_config_tests.py`, and
+`run_bacnet_announcement_tests.py` to the host suite. These use isolated
+clock/NVS/network stubs and ASan/UBSan, including pre-apply NTP validation,
+monotonic boot-time calculation, retained-clock rejection, timezone/DST,
+runtime server changes, and bounded startup notification scheduling.
+See [network time](NETWORK_TIME.md). Run the separate embedded-page mock
+browser check with `node tests/test_time_web_browser.mjs` after installing
+the existing Playwright dependencies in `installer/`; it does not use devices.
 
 Version 1.0.0 passed complete Windows Chrome and Edge hardware runs with
 native USB and file choosers, full verified backups, erase/flash/boot, key

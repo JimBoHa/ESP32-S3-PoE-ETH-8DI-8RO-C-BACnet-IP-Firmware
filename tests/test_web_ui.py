@@ -56,6 +56,7 @@ class WebUiTests(unittest.TestCase):
         for path in (
             "/api/v1/status",
             "/api/v1/config",
+            "/api/v1/time",
             "/api/v1/auth/challenge",
             "/api/v1/relay",
             "/api/v1/ota",
@@ -102,6 +103,64 @@ class WebUiTests(unittest.TestCase):
             "state must be on, off, or relinquish; priority 6 is reserved",
             self.web_admin,
         )
+
+    def test_cov_recovery_status_is_exposed_with_unavailable_fallback(self) -> None:
+        self.assertIn("bacnet_app_cov_recovery_get(&cov_stats)", self.web_admin)
+        self.assertIn('cJSON_AddObjectToObject(root, "bacnet_cov_recovery")', self.web_admin)
+        self.assertIn('cJSON_AddNullToObject(root, "bacnet_cov_recovery")', self.web_admin)
+        for field in ("confirmed_timeouts", "refresh_requests", "pending_objects", "capacity_errors"):
+            self.assertIn(f'"{field}", cov_stats.{field}', self.web_admin)
+
+    def test_relay_driver_readback_and_recovery_diagnostics_are_exposed(self) -> None:
+        self.assertIn("board_io_relay_diagnostics_get(&relay_diagnostics)", self.web_admin)
+        self.assertIn('cJSON_AddObjectToObject(root, "relay_driver")', self.web_admin)
+        for field in ("desired_mask", "applied_mask", "healthy", "registers_valid",
+                      "output_register", "configuration_register", "i2c_errors",
+                      "verification_failures", "configuration_recoveries", "mutex_timeouts", "last_error"):
+            self.assertIn(f'"{field}", relay_diagnostics.{field}', self.web_admin)
+        for field in ("output_register", "configuration_register"):
+            self.assertIn(f'cJSON_AddNullToObject(relay, "{field}")', self.web_admin)
+        self.assertIn('"last_verified_ms", (double)relay_diagnostics.last_verified_ms', self.web_admin)
+
+    def test_time_configuration_is_separate_authenticated_and_live_applied(self) -> None:
+        self.assertIn('id="timeForm"', self.page)
+        self.assertIn("authFetch('/api/v1/time', 'PUT'", self.page)
+        self.assertIn('request_authorize(request, "PUT", "/api/v1/time"', self.web_admin)
+        self.assertIn("TIME_BODY_MAX 1024U", self.web_admin)
+        handler = self.web_admin.split("static esp_err_t time_put_handler", 1)[1].split(
+            "static esp_err_t relay_put_handler", 1)[0]
+        self.assertLess(handler.index("request_authorize("), handler.index("cJSON_ParseWithLengthOpts("))
+        self.assertLess(handler.index("time_config_update(&candidate)"), handler.index("clock_service_config_changed()"))
+        self.assertIn("server_fields == 1U && timezone_fields == 1U", handler)
+        self.assertIn("body_length + 1U, NULL, true", handler)
+        self.assertIn("embedded_null", handler)
+        self.assertNotIn("config_store_update", handler)
+        self.assertNotIn("delayed_restart", handler)
+        self.assertIn('config.max_uri_handlers = 11;', self.web_admin)
+        self.assertIn('config.stack_size = 8192;', self.web_admin)
+
+    def test_time_presets_and_dirty_refresh_are_explicit(self) -> None:
+        self.assertIn('value="PST8PDT,M3.2.0/2,M11.1.0/2">America/Los_Angeles', self.page)
+        self.assertIn('value="UTC0">UTC', self.page)
+        self.assertIn('value="custom">Custom POSIX TZ rule', self.page)
+        self.assertIn("renderTimeConfig(timeConfig, !timeDirty)", self.page)
+        self.assertIn("if (timeEditVersion === editVersion) renderTimeConfig(latestTimeConfig, true)", self.page)
+        self.assertIn("if (!fillForm) return;", self.page.split("function renderTimeConfig", 1)[1])
+        self.assertIn("NTP is unauthenticated", self.page)
+        self.assertIn("not a downloadable timezone database", self.page)
+
+    def test_time_and_startup_status_distinguish_validity_from_transport_acceptance(self) -> None:
+        self.assertIn("clock_service_status_get(&status)", self.web_admin)
+        for field in ("valid", "synchronized", "source", "sync_count", "rejected_syncs",
+                      "start_failures", "config_generation"):
+            self.assertIn(f'"{field}", status.{field}', self.web_admin)
+        self.assertIn("bacnet_app_time_stats_get(&time_stats)", self.web_admin)
+        self.assertIn("bacnet_app_announcement_stats_get(&announcement_stats)", self.web_admin)
+        self.assertIn('"boot_destinations"', self.web_admin)
+        self.assertIn('"timestamp_from_valid_clock", time_stats.timestamp_from_valid_clock', self.web_admin)
+        self.assertIn("local transport acceptance; not remote receipt or command restoration", self.web_admin)
+        self.assertIn("status.bacnet_announcement.transport_acceptances", self.page)
+        self.assertIn("time?.valid ? time.local_time", self.page)
 
 
 if __name__ == "__main__":
