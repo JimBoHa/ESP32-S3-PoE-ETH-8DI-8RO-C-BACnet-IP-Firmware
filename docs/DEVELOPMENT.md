@@ -1,5 +1,8 @@
 # Development and release
 
+For GPT-6 Astra model selection, project instructions, and scoped agent
+verification, see [Codex CLI development](CODEX_WORKFLOW.md).
+
 ## Reproducible baseline
 
 - ESP-IDF: 5.5.4
