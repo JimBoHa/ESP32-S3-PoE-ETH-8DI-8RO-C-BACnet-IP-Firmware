@@ -56,6 +56,12 @@ management interface. The IDF build
 compiles the real ESP32-S3 application, embedded page, and selected
 bacnet-stack sources.
 
+The suite also runs `tests/run_board_io_tests.py`, compiling the actual relay
+driver against deterministic no-device IDF stubs with ASan/UBSan. It exercises
+mutex timeouts, latest-command retry, expander resets, readback failures, and
+safe output-direction recovery. See [relay output recovery](RELAY_OUTPUT_RECOVERY.md)
+for diagnostic semantics and commissioning limits.
+
 Version 1.0.0 passed complete Windows Chrome and Edge hardware runs with
 native USB and file choosers, full verified backups, erase/flash/boot, key
 handoff and locking, Ethernet OTA, signed reboot, and final BACnet checks.
