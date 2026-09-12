@@ -1,5 +1,8 @@
 # Development and release
 
+For GPT-6 Astra model selection, project instructions, and scoped agent
+verification, see [Codex CLI development](CODEX_WORKFLOW.md).
+
 ## Reproducible baseline
 
 - ESP-IDF: 5.5.4
@@ -55,6 +58,16 @@ ordering, and authenticated client routing; and static integrity of the embedded
 management interface. The IDF build
 compiles the real ESP32-S3 application, embedded page, and selected
 bacnet-stack sources.
+
+The host suite also runs `tests/run_bacnet_delivery_tests.py`. It compiles the
+pinned BACnet COV, transaction state machine, APDU dispatcher, and BI/BO code
+with AddressSanitizer and UndefinedBehaviorSanitizer. Ten isolated scenarios
+run in both baseline and candidate-recovery modes, with simulated time and
+an in-memory datalink; no network socket, real point, or relay is used.
+A compiler with these sanitizers and the initialized submodule are required.
+See [COV delivery recovery](BACNET_COMMAND_RECOVERY.md#confirmed-cov-delivery-recovery-112-development-candidate)
+for behavior and measurement limits. This harness does not replace supervised
+hardware commissioning or prove physical switch-to-door timing.
 
 The suite also runs `tests/run_board_io_tests.py`, compiling the actual relay
 driver against deterministic no-device IDF stubs with ASan/UBSan. It exercises

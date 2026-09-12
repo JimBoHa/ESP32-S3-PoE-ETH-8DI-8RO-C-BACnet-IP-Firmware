@@ -44,6 +44,7 @@
 
 #include "bip_esp32.h"
 #include "bacnet_instance.h"
+#include "bacnet_cov_recovery.h"
 #include "board_io.h"
 #include "config_store.h"
 #include "ethernet_manager.h"
@@ -107,6 +108,29 @@ static bool binary_input_encode_value_list(
         Binary_Input_Out_Of_Service(object_instance));
 }
 
+/* After a confirmed COV times out, request fresh current-value encoding through
+   the normal subscription FSM. Never replay the failed packet's old value,
+   create a subscription, extend a lifetime, or write a point. A real change
+   may supersede a scheduled refresh before its backoff expires. */
+#define COV_RECOVERY_WRAPPERS(name, object_type, upstream) \
+    static bool name##_cov_changed(uint32_t instance) \
+    { \
+        return upstream##_Change_Of_Value(instance) || \
+            bacnet_cov_recovery_pending(object_type, instance); \
+    } \
+    static void name##_cov_clear(uint32_t instance) \
+    { \
+        upstream##_Change_Of_Value_Clear(instance); \
+        bacnet_cov_recovery_clear(object_type, instance); \
+    }
+
+COV_RECOVERY_WRAPPERS(input, OBJECT_BINARY_INPUT, Binary_Input)
+COV_RECOVERY_WRAPPERS(output, OBJECT_BINARY_OUTPUT, Binary_Output)
+COV_RECOVERY_WRAPPERS(analog, OBJECT_ANALOG_INPUT, Analog_Input)
+COV_RECOVERY_WRAPPERS(binary_value, OBJECT_BINARY_VALUE, Binary_Value)
+COV_RECOVERY_WRAPPERS(string_value, OBJECT_CHARACTERSTRING_VALUE, CharacterString_Value)
+#undef COV_RECOVERY_WRAPPERS
+
 static bool binary_output_write_property(BACNET_WRITE_PROPERTY_DATA *data)
 {
     if (!data) {
@@ -140,31 +164,31 @@ static object_functions_t s_object_table[] = {
         Binary_Input_Index_To_Instance, Binary_Input_Valid_Instance,
         Binary_Input_Object_Name, Binary_Input_Read_Property, NULL,
         Binary_Input_Property_Lists, NULL, NULL, binary_input_encode_value_list,
-        Binary_Input_Change_Of_Value, Binary_Input_Change_Of_Value_Clear,
+        input_cov_changed, input_cov_clear,
         NULL, NULL, NULL, Binary_Input_Create, Binary_Input_Delete, NULL,
         read_only_writable_property_list},
     {OBJECT_ANALOG_INPUT, Analog_Input_Init, Analog_Input_Count,
         Analog_Input_Index_To_Instance, Analog_Input_Valid_Instance,
         Analog_Input_Object_Name, Analog_Input_Read_Property,
         NULL, Analog_Input_Property_Lists, NULL, NULL,
-        Analog_Input_Encode_Value_List, Analog_Input_Change_Of_Value,
-        Analog_Input_Change_Of_Value_Clear, Analog_Input_Intrinsic_Reporting,
+        Analog_Input_Encode_Value_List, analog_cov_changed,
+        analog_cov_clear, Analog_Input_Intrinsic_Reporting,
         NULL, NULL, Analog_Input_Create, Analog_Input_Delete, NULL,
         NULL},
     {OBJECT_BINARY_OUTPUT, Binary_Output_Init, Binary_Output_Count,
         Binary_Output_Index_To_Instance, Binary_Output_Valid_Instance,
         Binary_Output_Object_Name, Binary_Output_Read_Property,
         binary_output_write_property, Binary_Output_Property_Lists, NULL, NULL,
-        Binary_Output_Encode_Value_List, Binary_Output_Change_Of_Value,
-        Binary_Output_Change_Of_Value_Clear, NULL, NULL, NULL,
+        Binary_Output_Encode_Value_List, output_cov_changed,
+        output_cov_clear, NULL, NULL, NULL,
         Binary_Output_Create, Binary_Output_Delete, NULL,
         binary_output_writable_property_list},
     {OBJECT_BINARY_VALUE, Binary_Value_Init, Binary_Value_Count,
         Binary_Value_Index_To_Instance, Binary_Value_Valid_Instance,
         Binary_Value_Object_Name, Binary_Value_Read_Property,
         read_only_write_property, Binary_Value_Property_Lists, NULL, NULL,
-        Binary_Value_Encode_Value_List, Binary_Value_Change_Of_Value,
-        Binary_Value_Change_Of_Value_Clear, NULL, NULL, NULL, NULL, NULL, NULL,
+        Binary_Value_Encode_Value_List, binary_value_cov_changed,
+        binary_value_cov_clear, NULL, NULL, NULL, NULL, NULL, NULL,
         read_only_writable_property_list},
     {OBJECT_CHARACTERSTRING_VALUE, CharacterString_Value_Init,
         CharacterString_Value_Count, CharacterString_Value_Index_To_Instance,
@@ -172,8 +196,8 @@ static object_functions_t s_object_table[] = {
         CharacterString_Value_Read_Property, read_only_write_property,
         CharacterString_Value_Property_Lists, NULL, NULL,
         CharacterString_Value_Encode_Value_List,
-        CharacterString_Value_Change_Of_Value,
-        CharacterString_Value_Change_Of_Value_Clear, NULL, NULL, NULL, NULL,
+        string_value_cov_changed,
+        string_value_cov_clear, NULL, NULL, NULL, NULL,
         NULL, NULL, read_only_writable_property_list},
     {OBJECT_NETWORK_PORT, Network_Port_Init, Network_Port_Count,
         Network_Port_Index_To_Instance, Network_Port_Valid_Instance,
@@ -536,6 +560,7 @@ static void bacnet_task(void *context)
     if (initialized) {
         register_service_handlers();
         handler_cov_init();
+        bacnet_cov_recovery_init();
         update_binary_objects();
         update_analog_status_objects();
     }
@@ -646,6 +671,7 @@ static void bacnet_task(void *context)
             s_instance_conflicts = s_instance.conflicts;
             uint32_t elapsed_ms = (uint32_t)((now_us - last_timer_us) / 1000LL);
             if (elapsed_ms) {
+                bacnet_cov_recovery_timer_milliseconds(elapsed_ms);
                 tsm_timer_milliseconds(elapsed_ms);
                 last_timer_us += (int64_t)elapsed_ms * 1000LL;
             }
@@ -734,6 +760,17 @@ bool bacnet_app_command_trace_get(bacnet_command_trace_snapshot_t *snapshot)
         return false;
     }
     bacnet_command_trace_snapshot(snapshot);
+    xSemaphoreGive(s_object_mutex);
+    return true;
+}
+
+bool bacnet_app_cov_recovery_get(bacnet_cov_recovery_stats_t *stats)
+{
+    if (!stats || !s_object_mutex ||
+        xSemaphoreTake(s_object_mutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+        return false;
+    }
+    bacnet_cov_recovery_stats(stats);
     xSemaphoreGive(s_object_mutex);
     return true;
 }

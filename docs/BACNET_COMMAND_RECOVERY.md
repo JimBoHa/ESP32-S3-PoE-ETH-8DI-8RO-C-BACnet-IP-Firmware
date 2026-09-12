@@ -101,6 +101,59 @@ commands. It excludes BACnet reads, COV traffic, invalid frames rejected before
 APDU dispatch, and responses outside the current request's synchronous handler.
 There is no network endpoint to clear or persist the recorder.
 
+## Confirmed COV delivery recovery (1.1.2 development candidate)
+
+The pinned stack clears a subscription's pending-send flag after submitting
+its notification to the datalink. Its transaction state machine performs the
+configured retries, but after those retries fail the COV service frees the
+transaction without requesting another notification of an unchanged value.
+If a final input change and every retry are lost, the subscriber can remain
+stale until another change, a subscription renewal, or a successful client
+read. Direct reads can still report the correct current value. This is a
+reproduced failure mode, not proof that packet loss caused a particular site
+incident or a claim of BACnet standards noncompliance.
+
+The development candidate adds an application-level COV timeout handler. It
+identifies the object in a failed confirmed COV transaction, waits one second,
+then asks the normal subscription state machine to encode the object's
+**current** value again. It does not replay the failed packet's old value.
+The pause allows other queued subscriptions to use the freed transaction
+slots before a failed recipient starts another transaction. A real change
+can supersede the scheduled refresh before the pause expires.
+
+Recovery is object-scoped: all current subscribers of the affected object can
+receive an additional current-value notification, including recipients whose
+earlier notification succeeded. No subscription is created or renewed, no
+expired/canceled subscription is revived, and no lifetime is extended. Point
+values, relay commands, priority arrays, startup defaults, APDU timeouts, and
+retry counts are unchanged. This does not solve missing command reassertion
+after a remote restart.
+
+With a 3,000 ms APDU timeout and three retries, the original sends occur at
+approximately 0, 3, 6, and 9 seconds; transaction failure occurs at 12 seconds.
+A fresh recovery notification becomes eligible at approximately 13 seconds,
+subject to available transaction slots and loop scheduling. This is a failure
+recovery interval, not an added delay on healthy input changes or a guaranteed
+end-to-end response bound. Continued network failure can prevent delivery.
+
+The read-only `/api/v1/status` response includes `bacnet_cov_recovery`, or
+`null` if its mutex-protected snapshot is temporarily unavailable:
+
+| Counter | Meaning |
+|---|---|
+| `confirmed_timeouts` | Failed confirmed COV transactions recognized since initialization; one failed recipient can contribute repeatedly. |
+| `refresh_requests` | Due object-refresh flags consumed by the normal COV state machine; not a count of transmitted, acknowledged, or physically acted-on values. |
+| `pending_objects` | Objects with scheduled refresh flags, including flags that may remain after their last subscription expires or is canceled. Not a subscription count. |
+| `capacity_errors` | Failed attempts to allocate a pending object entry. The fixed 32-entry table exceeds the current 26 COV-capable objects. |
+
+These counters are RAM-only. The regression harness uses the actual pinned
+COV/TSM/APDU/BI/BO implementations with an in-memory datalink and simulated
+time. It compares baseline and recovery behavior for lost final changes,
+changes behind an unacknowledged notification, polarity, command typing and
+priority, normal acknowledgments, transaction-slot pressure, cancellation,
+expiry, superseding changes, and ignoring non-COV failures. It is not a
+physical door timing test, network acceptance test, or BTL certification.
+
 ## Metasys-specific checks
 
 The ADS/ADX server address may differ from the NAE that owns the integration.
