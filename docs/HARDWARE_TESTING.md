@@ -1,5 +1,11 @@
 # Hardware acceptance testing
 
+Site-network addresses in the examples have been replaced with RFC 5737
+documentation addresses.
+Supply actual deployment addresses through private commissioning settings;
+these example addresses are not field targets. Historical test counts refer
+to their recorded runs, not to the anonymized addresses.
+
 The hardware-in-the-loop runner performs the repeatable, software-visible
 portion of commissioning with an independent BACpypes3 client. It tests both
 broadcast and directed discovery, the complete object map and metadata,
