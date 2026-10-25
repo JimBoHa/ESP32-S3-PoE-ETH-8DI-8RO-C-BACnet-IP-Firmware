@@ -1,5 +1,11 @@
 # Hardware acceptance testing
 
+Site-network addresses in the examples have been replaced with RFC 5737
+documentation addresses.
+Supply actual deployment addresses through private commissioning settings;
+these example addresses are not field targets. Historical test counts refer
+to their recorded runs, not to the anonymized addresses.
+
 The hardware-in-the-loop runner performs the repeatable, software-visible
 portion of commissioning with an independent BACpypes3 client. It tests both
 broadcast and directed discovery, the complete object map and metadata,
@@ -22,8 +28,8 @@ that address and port first:
 
 ```sh
 python tools/bacnet_hil_test.py \
-  --local-address 192.168.75.191/24 \
-  --device-address 192.168.75.154 \
+  --local-address 192.0.2.191/24 \
+  --device-address 192.0.2.154 \
   --device-instance 599153 \
   --report hardware-report.json
 ```
@@ -45,8 +51,8 @@ relinquish any priority slots it touched:
 
 ```sh
 python tools/bacnet_hil_test.py \
-  --local-address 192.168.75.191/24 \
-  --device-address 192.168.75.154 \
+  --local-address 192.0.2.191/24 \
+  --device-address 192.0.2.154 \
   --device-instance 599153 \
   --exercise-relays \
   --relay-safety-confirmation loads-disconnected \

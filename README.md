@@ -1,5 +1,11 @@
 # ESP32-S3-PoE-ETH-8DI-8RO-C BACnet/IP firmware
 
+Site-network addresses in the examples have been replaced with RFC 5737
+documentation addresses.
+Supply actual deployment addresses through private commissioning settings;
+these example addresses are not field targets. Historical test counts refer
+to their recorded runs, not to the anonymized addresses.
+
 Native ESP-IDF firmware that exposes all eight digital inputs, all eight relay
 commands, and device health from the Waveshare
 `ESP32-S3-POE-ETH-8DI-8RO-C` as BACnet/IP objects. It replaces the factory
@@ -140,7 +146,7 @@ space; the current firmware uses about 9% of either application slot.
 ## Web management
 
 Open the device address in a current browser, for example
-`http://192.168.75.153/`. The factory-style Relay Control page shows every DI
+`http://192.0.2.153/`. The factory-style Relay Control page shows every DI
 and RO, effective BACnet priority, network/BACnet health, runtime data, and the
 persistent configuration. The Configuration and Firmware tabs provide the
 repository's full management feature set.
@@ -170,8 +176,8 @@ Keep the downloaded file private (mode 0600 on macOS/Linux).
 Public read-only calls:
 
 ```sh
-python tools/device_admin.py --device 192.168.75.153 status
-python tools/device_admin.py --device 192.168.75.153 config-get
+python tools/device_admin.py --device 192.0.2.153 status
+python tools/device_admin.py --device 192.0.2.153 config-get
 ```
 
 Firmware 1.1.1 adds a bounded, authenticated BACnet write-request/response
@@ -189,7 +195,7 @@ path used by the web page:
 
 ```sh
 python tools/device_admin.py \
-  --device 192.168.75.153 \
+  --device 192.0.2.153 \
   --key-file device.key \
   relay-set --channel 1 --state on --priority 8
 ```
@@ -203,21 +209,21 @@ to NVS, assigned a new database revision, and applied after reboot:
   "device_name": "BACnet IO 599153",
   "location": "Mechanical room",
   "dhcp_enabled": false,
-  "ip_address": "192.168.75.153",
+  "ip_address": "192.0.2.153",
   "netmask": "255.255.255.0",
-  "gateway": "192.168.75.1",
-  "dns_server": "192.168.75.1"
+  "gateway": "192.0.2.1",
+  "dns_server": "192.0.2.1"
 }
 ```
 
 ```sh
 python tools/device_admin.py \
-  --device 192.168.75.153 \
+  --device 192.0.2.153 \
   --key-file device.key \
   config-set --file site-config.json
 
 python tools/device_admin.py \
-  --device 192.168.75.153 \
+  --device 192.0.2.153 \
   --key-file device.key \
   reboot --yes
 ```
@@ -241,7 +247,7 @@ Upload only `firmware-ota.bin`, never the merged initial-flash image:
 
 ```sh
 python tools/device_admin.py \
-  --device 192.168.75.153 \
+  --device 192.0.2.153 \
   --key-file device.key \
   ota --file release/v1.0.0/firmware-ota.bin --yes
 ```

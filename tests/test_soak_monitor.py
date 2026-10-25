@@ -29,7 +29,7 @@ def healthy_status() -> dict[str, object]:
         "last_reset_reason": "software",
         "last_reset_reason_code": 3,
         "product": "ESP32 BACnet I/O",
-        "ip_address": "192.168.75.154",
+        "ip_address": "192.0.2.154",
         "bacnet_device_instance": 599153,
         "bacnet_vendor_id": 260,
         "bacnet_udp_port": 47808,
@@ -84,7 +84,7 @@ def instance_health_values(
 
 def probe_args() -> argparse.Namespace:
     return argparse.Namespace(
-        device_address="192.168.75.154", device_instance=599153,
+        device_address="192.0.2.154", device_instance=599153,
         bacnet_port=47808, timeout=0.1,
     )
 
@@ -97,7 +97,7 @@ class SoakMonitorTests(unittest.TestCase):
         with patch.object(soak_monitor, "build_opener", side_effect=[first, second]) as factory, \
              patch.object(soak_monitor, "ProxyHandler") as proxy:
             for endpoint in ("/api/v1/status", "/api/v1/config"):
-                value, _latency = soak_monitor.fetch_json("192.168.75.154", endpoint, 1)
+                value, _latency = soak_monitor.fetch_json("192.0.2.154", endpoint, 1)
                 self.assertEqual(value, {"healthy": True})
         self.assertEqual(factory.call_count, 2)
         self.assertEqual(proxy.call_count, 2)
@@ -110,10 +110,10 @@ class SoakMonitorTests(unittest.TestCase):
         with patch.object(soak_monitor.socket, "socket") as factory:
             client = factory.return_value.__enter__.return_value
             client.getsockname.return_value = ("0.0.0.0", 55123)
-            client.recvfrom.return_value = (I_AM, ("192.168.75.154", 47808))
-            result = soak_monitor.probe_bacnet("192.168.75.154", 599153, 47808, 1)
+            client.recvfrom.return_value = (I_AM, ("192.0.2.154", 47808))
+            result = soak_monitor.probe_bacnet("192.0.2.154", 599153, 47808, 1)
             self.assertEqual(result["local_udp_port"], 55123)
-            self.assertEqual(result["source"], "192.168.75.154:47808")
+            self.assertEqual(result["source"], "192.0.2.154:47808")
             client.sendto.assert_called_once()
 
     def test_bacnet_failures_keep_local_udp_port_without_retry(self) -> None:
@@ -125,9 +125,9 @@ class SoakMonitorTests(unittest.TestCase):
                     client.recvfrom.side_effect = failure
                 else:
                     packet = I_AM[:-1] if failure == "malformed" else I_AM
-                    client.recvfrom.return_value = (packet, ("192.168.75.155", 47808))
+                    client.recvfrom.return_value = (packet, ("192.0.2.155", 47808))
                 with self.assertRaisesRegex(soak_monitor.SoakError, "local UDP port 55123"):
-                    soak_monitor.probe_bacnet("192.168.75.154", 599153, 47808, 1)
+                    soak_monitor.probe_bacnet("192.0.2.154", 599153, 47808, 1)
                 client.sendto.assert_called_once()
 
     def test_bacnet_deadline_keeps_local_udp_port(self) -> None:
@@ -136,7 +136,7 @@ class SoakMonitorTests(unittest.TestCase):
             client = factory.return_value.__enter__.return_value
             client.getsockname.return_value = ("0.0.0.0", 55123)
             with self.assertRaisesRegex(soak_monitor.SoakError, "timed out.*local UDP port 55123"):
-                soak_monitor.probe_bacnet("192.168.75.154", 599153, 47808, 1)
+                soak_monitor.probe_bacnet("192.0.2.154", 599153, 47808, 1)
             client.recvfrom.assert_not_called()
             client.sendto.assert_called_once()
 
@@ -199,7 +199,7 @@ class SoakMonitorTests(unittest.TestCase):
             with self.subTest(failed=failed), tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / "soak.jsonl"
                 args = soak_monitor.build_parser().parse_args([
-                    "--device-address", "192.168.75.154", "--device-instance", "599153",
+                    "--device-address", "192.0.2.154", "--device-instance", "599153",
                     "--output", str(path), "--duration", "1", "--interval", "1", "--timeout", "0.1",
                 ])
                 response = dict(bacnet_response(), latency_ms=1.0)
@@ -415,7 +415,7 @@ class SoakMonitorTests(unittest.TestCase):
             with self.subTest(conflict=conflict), tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / "soak.jsonl"
                 args = soak_monitor.build_parser().parse_args([
-                    "--device-address", "192.168.75.154",
+                    "--device-address", "192.0.2.154",
                     "--device-instance", "599153", "--output", str(path),
                     "--duration", "1", "--interval", "1", "--timeout", "0.1",
                 ])
@@ -500,7 +500,7 @@ class SoakMonitorTests(unittest.TestCase):
 
     def test_argument_safety(self) -> None:
         args = argparse.Namespace(
-            device_address="192.168.75.154",
+            device_address="192.0.2.154",
             device_instance=599153,
             bacnet_port=47808,
             duration=60.0,

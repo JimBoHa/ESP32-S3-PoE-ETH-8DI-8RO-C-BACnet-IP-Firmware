@@ -182,10 +182,12 @@ void config_model_defaults(firmware_config_t *config)
     snprintf(config->device_name, sizeof(config->device_name), "BACnet IO 599153");
     snprintf(config->vendor_name, sizeof(config->vendor_name), "%s", FW_DEFAULT_VENDOR_NAME);
     snprintf(config->location, sizeof(config->location), "Uncommissioned");
-    snprintf(config->ip_address, sizeof(config->ip_address), "192.168.75.153");
+    /* DHCP is the fresh-device default. These static placeholders are RFC 5737
+     * examples; set deployment values during private commissioning. */
+    snprintf(config->ip_address, sizeof(config->ip_address), "192.0.2.153");
     snprintf(config->netmask, sizeof(config->netmask), "255.255.255.0");
-    snprintf(config->gateway, sizeof(config->gateway), "192.168.75.1");
-    snprintf(config->dns_server, sizeof(config->dns_server), "192.168.75.1");
+    snprintf(config->gateway, sizeof(config->gateway), "192.0.2.1");
+    snprintf(config->dns_server, sizeof(config->dns_server), "192.0.2.1");
     for (unsigned i = 0; i < FW_DI_COUNT; ++i) {
         snprintf(config->input_names[i], sizeof(config->input_names[i]), "Digital Input %u", i + 1U);
     }

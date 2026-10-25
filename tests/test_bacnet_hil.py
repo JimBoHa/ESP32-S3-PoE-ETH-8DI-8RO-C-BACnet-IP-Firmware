@@ -21,8 +21,8 @@ class FakePriorityValue:
 
 def args(**overrides: object) -> argparse.Namespace:
     values = {
-        "local_address": "192.168.75.191/24",
-        "device_address": "192.168.75.154",
+        "local_address": "192.0.2.191/24",
+        "device_address": "192.0.2.154",
         "device_instance": 599153,
         "client_instance": 4194001,
         "timeout": 4.0,

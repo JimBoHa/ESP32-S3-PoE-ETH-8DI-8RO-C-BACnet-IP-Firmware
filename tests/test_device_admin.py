@@ -58,7 +58,7 @@ class DeviceAdminTests(unittest.TestCase):
         )
 
     def test_normalize_device(self) -> None:
-        self.assertEqual(normalize_device("192.168.75.153"), "http://192.168.75.153")
+        self.assertEqual(normalize_device("192.0.2.153"), "http://192.0.2.153")
         self.assertEqual(normalize_device("http://example.test:8080/"), "http://example.test:8080")
         with self.assertRaises(AdminError):
             normalize_device("http://example.test/api")

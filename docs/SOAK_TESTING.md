@@ -1,5 +1,11 @@
 # Soak testing
 
+Site-network addresses in the examples have been replaced with RFC 5737
+documentation addresses.
+Supply actual deployment addresses through private commissioning settings;
+these example addresses are not field targets. Historical test counts refer
+to their recorded runs, not to the anonymized addresses.
+
 `tools/soak_monitor.py` records controller health to an append-only JSONL file.
 Each interval it sends a directed BACnet Who-Is and validates the I-Am identity,
 and independently reads the public HTTP status and configuration endpoints.
@@ -51,7 +57,7 @@ For a 24-hour, one-minute-interval run with all relays expected off:
 
 ```sh
 python tools/soak_monitor.py \
-  --device-address 192.168.75.154 \
+  --device-address 192.0.2.154 \
   --device-instance 599153 \
   --duration 86400 \
   --interval 60 \
