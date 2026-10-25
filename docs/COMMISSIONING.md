@@ -1,5 +1,11 @@
 # Commissioning and recovery
 
+Site-network addresses in the examples have been replaced with RFC 5737
+documentation addresses.
+Supply actual deployment addresses through private commissioning settings;
+these example addresses are not field targets. Historical test counts refer
+to their recorded runs, not to the anonymized addresses.
+
 Version 0.13.5 completed the software-visible target-board acceptance suite
 and a strict 24-hour soak. Version 1.1.0 has newer finite regression and
 Metasys mapping/read/subscription evidence, not a completed version-specific

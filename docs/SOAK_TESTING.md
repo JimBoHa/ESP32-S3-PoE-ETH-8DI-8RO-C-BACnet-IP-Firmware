@@ -1,5 +1,11 @@
 # Soak testing
 
+Site-network addresses in the examples have been replaced with RFC 5737
+documentation addresses.
+Supply actual deployment addresses through private commissioning settings;
+these example addresses are not field targets. Historical test counts refer
+to their recorded runs, not to the anonymized addresses.
+
 `tools/soak_monitor.py` records controller health to an append-only JSONL file.
 Each interval it sends a directed BACnet Who-Is and validates the I-Am identity,
 and independently reads the public HTTP status and configuration endpoints.

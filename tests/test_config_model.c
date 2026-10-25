@@ -21,6 +21,9 @@ int main(void)
     assert(strcmp(config.vendor_name, FW_DEFAULT_VENDOR_NAME) == 0);
     assert(config.input_invert_mask == 0xFFU);
     assert(config.dhcp_enabled);
+    assert(strcmp(config.ip_address, "192.0.2.153") == 0);
+    assert(strcmp(config.gateway, "192.0.2.1") == 0);
+    assert(strcmp(config.dns_server, "192.0.2.1") == 0);
     assert(!config.restore_relay_state);
 
     firmware_config_t changed = config;
@@ -56,7 +59,7 @@ int main(void)
     assert(!config_model_validate(&invalid, reason, sizeof(reason)));
 
     invalid = static_config;
-    strcpy(invalid.gateway, "192.168.76.1");
+    strcpy(invalid.gateway, "198.51.100.1");
     assert(!config_model_validate(&invalid, reason, sizeof(reason)));
 
     invalid = static_config;

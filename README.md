@@ -1,5 +1,11 @@
 # ESP32-S3-PoE-ETH-8DI-8RO-C BACnet/IP firmware
 
+Site-network addresses in the examples have been replaced with RFC 5737
+documentation addresses.
+Supply actual deployment addresses through private commissioning settings;
+these example addresses are not field targets. Historical test counts refer
+to their recorded runs, not to the anonymized addresses.
+
 Native ESP-IDF firmware that exposes all eight digital inputs, all eight relay
 commands, and device health from the Waveshare
 `ESP32-S3-POE-ETH-8DI-8RO-C` as BACnet/IP objects. It replaces the factory
